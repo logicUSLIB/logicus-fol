@@ -1,0 +1,28 @@
+{
+    "type": "package",
+    "name": "logicUSLIB/logicus-fol",
+    "summary": "Elm package for working with First Order Logic.",
+    "license": "BSD-3-Clause",
+    "version": "1.0.0",
+    "exposed-modules": [
+        "LogicUS.FOL.SyntaxSemantics",
+        "LogicUS.FOL.SemanticTableaux",
+        "LogicUS.FOL.NormalForms",
+        "LogicUS.FOL.Clauses",
+        "LogicUS.FOL.Herbrand",
+        "LogicUS.FOL.Unification",
+        "LogicUS.FOL.Resolution"
+    ],
+    "elm-version": "0.19.1 <= v < 0.19.2",
+    "dependencies": {
+        "elm/core": "1.0.5 <= v < 2.0.0",
+        "elm/parser": "1.1.0 <= v < 2.0.0",
+        "elm-community/graph": "6.0.0 <= v < 7.0.0",
+        "elm-community/intdict": "3.0.0 <= v < 4.0.0",
+        "elm-community/list-extra": "8.5.0 <= v < 9.0.0",
+        "elm-community/maybe-extra": "5.2.0 <= v < 6.0.0",
+        "elm-community/string-extra": "4.0.1 <= v < 5.0.0",
+        "logicUSLIB/logicus-pl": "1.0.0 <= v < 2.0.0"
+    },
+    "test-dependencies": {}
+}

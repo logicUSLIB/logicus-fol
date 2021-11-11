@@ -742,7 +742,7 @@ resolutionTableauToDOT g =
                     Just <| FOL_SS.substitutionToString rn
 
                 else
-                    Just <| FOL_SS.substitutionToString rn ++ "<BR\\>" ++ FOL_SS.substitutionToString mgu
+                    Just <| FOL_SS.substitutionToString rn ++ "<BR/>" ++ FOL_SS.substitutionToString mgu
 
         initialNodes =
             String.join ";" <|

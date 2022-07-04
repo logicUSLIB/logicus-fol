@@ -1,8 +1,8 @@
 module LogicUS.FOL.SyntaxSemantics exposing
-    ( Ident, Variable, Term(..), FormulaFOL(..), SetFOL, ffolNegation, termVarSymbols, termsVarSymbols, ffolVarSymbols, termConstSymbols, termsConstSymbols, ffolConstSymbols, termFuncSymbols, termsFuncSymbols, ffolFuncSymbols, ffolPredSymbols, ffolContainsEquality, ffolFormTree, ffolIsWellFormed, ffolHasInstanceOfVar, ffolHasFreeInstanceOfVar, ffolHasLinkedInstanceOfVar, ffolFreeVars, ffolLinkedVars, termIsClosed, termClosedTerms, ffolAllClosedTerms, ffolIsOpen, ffolIsClosed
+    ( Ident, Variable, Term(..), FormulaFOL(..), SetFOL, ffolNegation, termVarSymbols, termsVarSymbols, ffolVarSymbols, termConstSymbols, termsConstSymbols, ffolConstSymbols, termFuncSymbols, termsFuncSymbols, ffolFuncSymbols, ffolPredSymbols, ffolContainsEquality, ffolFormTree, ffolIsWellFormed, ffolHasInstanceOfVar, ffolHasFreeInstanceOfVar, ffolHasLinkedInstanceOfVar, ffolFreeVars, ffolLinkedVars, termIsClosed, termClosedTerms, termsClosedTerms, ffolAllClosedTerms, ffolIsOpen, ffolIsClosed
     , Substitution, substitutionDomain, termApplySubstitution, ffolApplySubstitution, substitutionComposition, renameVars, ffolUniversalClausure, ffolExistencialClausure
     , L_Structure, lStructureIsValid, termInterpretation, termsInterpretation, ffolValuation, sfolInterpretation
-    , ffolReadFromString, ffolReadExtraction, ffolToInputString, substitutionReadFromString, substitutionReadExtraction, substitutionToInputString
+    , ffolReadFromString, ffolReadExtraction, ffolRead, sfolRead, ffolToInputString, substitutionReadFromString, substitutionReadExtraction, substitutionToInputString
     , varToString, varsToString, varToMathString, varsToMathString, identToString, identsToString, identToMathString, identsToMathString, termToString, termsToString, termToMathString, termsToMathString, ffolToString, sfolToString, ffolToMathString, sfolToMathString, sfolToMathString2, formTreeToString, formTreeToDOT, substitutionToString, substitutionToMathString, l_StructureToString
     )
 
@@ -11,7 +11,7 @@ module LogicUS.FOL.SyntaxSemantics exposing
 
 # FOL Formulas and Sets
 
-@docs Ident, Variable, Term, FormulaFOL, SetFOL, ffolNegation, termVarSymbols, termsVarSymbols, ffolVarSymbols, termConstSymbols, termsConstSymbols, ffolConstSymbols, termFuncSymbols, termsFuncSymbols, ffolFuncSymbols, ffolPredSymbols, ffolContainsEquality, ffolFormTree, ffolIsWellFormed, ffolHasInstanceOfVar, ffolHasFreeInstanceOfVar, ffolHasLinkedInstanceOfVar, ffolFreeVars, ffolLinkedVars, termIsClosed, termClosedTerms, ffolAllClosedTerms, ffolIsOpen, ffolIsClosed
+@docs Ident, Variable, Term, FormulaFOL, SetFOL, ffolNegation, termVarSymbols, termsVarSymbols, ffolVarSymbols, termConstSymbols, termsConstSymbols, ffolConstSymbols, termFuncSymbols, termsFuncSymbols, ffolFuncSymbols, ffolPredSymbols, ffolContainsEquality, ffolFormTree, ffolIsWellFormed, ffolHasInstanceOfVar, ffolHasFreeInstanceOfVar, ffolHasLinkedInstanceOfVar, ffolFreeVars, ffolLinkedVars, termIsClosed, termClosedTerms, termsClosedTerms, ffolAllClosedTerms, ffolIsOpen, ffolIsClosed
 
 
 # Substitutions, variable rename and clausure
@@ -26,7 +26,7 @@ module LogicUS.FOL.SyntaxSemantics exposing
 
 # Parsers
 
-@docs ffolReadFromString, ffolReadExtraction, ffolToInputString, substitutionReadFromString, substitutionReadExtraction, substitutionToInputString
+@docs ffolReadFromString, ffolReadExtraction, ffolRead, sfolRead, ffolToInputString, substitutionReadFromString, substitutionReadExtraction, substitutionToInputString
 
 
 # Representation
@@ -48,7 +48,6 @@ import LogicUS.AUX.B_Expressions exposing (B_Expr(..))
 import Maybe.Extra as ME
 import Parser exposing ((|.), (|=), Parser, Trailing(..), succeed)
 import Set exposing (Set)
-import String.Extra as SE
 
 
 
@@ -270,7 +269,7 @@ termFuncSymbols t =
             []
 
         Func f_ ts ->
-            List.sort <| LE.unique <| f_ :: (List.concat <| List.map termConstSymbols ts)
+            List.sort <| LE.unique <| f_ :: (List.concat <| List.map termFuncSymbols ts)
 
 
 {-| It gets all the function symbols that acts inside a list of terms
@@ -769,6 +768,13 @@ termClosedTerms t =
                         else
                             []
                        )
+
+
+{-| It gives all the closed terms inside a list of terms.
+-}
+termsClosedTerms : List Term -> List Term
+termsClosedTerms ts =
+    LE.unique <| List.concat <| List.map termClosedTerms ts
 
 
 {-| It gives the all the closed terms inside a formula
@@ -1347,7 +1353,7 @@ sfolInterpretation fs ls =
 
 cleanSpaces : String -> String
 cleanSpaces x =
-    String.join "" <| String.split " " <| SE.clean x
+    String.replace " " "" <| String.replace "\n" "" x
 
 
 {-| It reads the formula from a string. It returns a tuple with may be a formula (if it can be read it), the input considerated to parse and a message of error it it is not able to performs the parsing. The rules of the notation are:
@@ -1384,11 +1390,34 @@ ffolReadExtraction ( f, _, _ ) =
     Maybe.withDefault Insat f
 
 
+{-| It reads the formula from a string. It returns the Formula if the string si correct, otherwise it returns Insat.
+-}
+ffolRead : String -> FormulaFOL
+ffolRead =
+    ffolReadExtraction << ffolReadFromString
+
+
+{-| It reads a set of formulas from a string. Each string that corresponds to each of the formulas of the set must be ended by a point `.`
+(the last formula can, optionally, not be ended by a point).
+-}
+sfolRead : String -> SetFOL
+sfolRead fs =
+    let
+        fsRead =
+            List.map ffolReadFromString <| List.filter (not << String.isEmpty << cleanSpaces) <| String.split "." fs
+    in
+    if List.any (\( mf, _, _ ) -> mf == Nothing) fsRead then
+        []
+
+    else
+        List.map ffolReadExtraction fsRead
+
+
 termToInputString : Term -> String
 termToInputString x =
     case x of
         Var ( vname, sb, sp ) ->
-            (String.toLower << String.left 1) vname
+            (String.toUpper << String.left 1) vname
                 ++ String.dropLeft 1 vname
                 ++ (if List.isEmpty sb then
                         ""
@@ -1404,10 +1433,10 @@ termToInputString x =
                    )
 
         Func ( fname, [] ) ts ->
-            "*" ++ (String.toLower << String.left 1) fname ++ String.dropLeft 1 fname ++ termsToString ts
+            (String.toLower << String.left 1) fname ++ String.dropLeft 1 fname ++ termsToString ts
 
         Func ( fname, findices ) ts ->
-            "*" ++ (String.toLower << String.left 1) fname ++ String.dropLeft 1 fname ++ "_{" ++ (String.join "," <| List.map String.fromInt findices) ++ "}" ++ termsToString ts
+            (String.toLower << String.left 1) fname ++ String.dropLeft 1 fname ++ "_{" ++ (String.join "," <| List.map String.fromInt findices) ++ "}" ++ termsToString ts
 
 
 termsToInputString : List Term -> String
@@ -1466,6 +1495,68 @@ ffolToInputString f =
 -- It defines the syntax of a propositional variable that can be subscripting or not
 
 
+folVariableParser : Parser Variable
+folVariableParser =
+    Parser.oneOf
+        [ Parser.succeed identity
+            |= Parser.backtrackable folVarSubSuperIndexedParser
+        , Parser.succeed identity
+            |= Parser.backtrackable folVarSubindexedParser
+        , Parser.succeed identity
+            |= Parser.backtrackable folVarSupindexedParser
+        , Parser.succeed (\x -> ( x, [], 0 ))
+            |= folVarNameParser
+        ]
+
+
+folVarNameParser : Parser String
+folVarNameParser =
+    Parser.succeed ()
+        |. Parser.chompIf Char.isUpper
+        |. Parser.chompWhile Char.isAlpha
+        |> Parser.getChompedString
+
+
+folVarSubindexedParser : Parser Variable
+folVarSubindexedParser =
+    Parser.succeed (\x y -> ( x, y, 0 ))
+        |= folVarNameParser
+        |= Parser.sequence
+            { start = "_{"
+            , separator = ","
+            , end = "}"
+            , spaces = Parser.spaces
+            , item = Parser.int
+            , trailing = Forbidden
+            }
+
+
+folVarSupindexedParser : Parser Variable
+folVarSupindexedParser =
+    Parser.succeed (\x y -> ( x, [], y ))
+        |= folVarNameParser
+        |. Parser.symbol "^{"
+        |= Parser.int
+        |. Parser.symbol "}"
+
+
+folVarSubSuperIndexedParser : Parser Variable
+folVarSubSuperIndexedParser =
+    Parser.succeed (\x y z -> ( x, y, z ))
+        |= folVarNameParser
+        |= Parser.sequence
+            { start = "_{"
+            , separator = ","
+            , end = "}"
+            , spaces = Parser.spaces
+            , item = Parser.int
+            , trailing = Forbidden
+            }
+        |. Parser.symbol "^{"
+        |= Parser.int
+        |. Parser.symbol "}"
+
+
 folTermNameParser : Parser String
 folTermNameParser =
     Parser.succeed ()
@@ -1481,6 +1572,8 @@ folTermIdentifierParser =
             |= Parser.backtrackable folTermIdentifierSubindexedParser
         , Parser.succeed (\x -> ( x, [] ))
             |= folTermNameParser
+        , Parser.succeed (\x -> ( x, [] ))
+            |= Parser.map String.fromInt Parser.int
         ]
 
 
@@ -1534,7 +1627,6 @@ folTermParser : Parser Term
 folTermParser =
     Parser.oneOf
         [ succeed Func
-            |. Parser.symbol "*"
             |= folTermIdentifierParser
             |= folListTermParser
         , succeed Var
@@ -1599,13 +1691,14 @@ ffolParserAux =
             |. Parser.symbol "!F"
         , Parser.succeed Taut
             |. Parser.symbol "!T"
+        , Parser.backtrackable <|
+            Parser.succeed Equal
+                |= folTermParser
+                |. Parser.symbol "="
+                |= folTermParser
         , Parser.succeed Pred
             |= folPredIdentifierParser
             |= folListTermParser
-        , Parser.succeed Equal
-            |= folTermParser
-            |. Parser.symbol "="
-            |= folTermParser
         , Parser.succeed Neg
             |. Parser.oneOf
                 [ Parser.symbol "¬"
@@ -1772,60 +1865,6 @@ substitutionItemParser =
         |= folTermParser
 
 
-folVariableParser : Parser Variable
-folVariableParser =
-    Parser.oneOf
-        [ Parser.succeed identity
-            |= Parser.backtrackable folVarSubSuperIndexedParser
-        , Parser.succeed identity
-            |= Parser.backtrackable folVarSubindexedParser
-        , Parser.succeed identity
-            |= Parser.backtrackable folVarSupindexedParser
-        , Parser.succeed (\x -> ( x, [], 0 ))
-            |= folTermNameParser
-        ]
-
-
-folVarSubindexedParser : Parser Variable
-folVarSubindexedParser =
-    Parser.succeed (\x y -> ( x, y, 0 ))
-        |= folTermNameParser
-        |= Parser.sequence
-            { start = "_{"
-            , separator = ","
-            , end = "}"
-            , spaces = Parser.spaces
-            , item = Parser.int
-            , trailing = Forbidden
-            }
-
-
-folVarSupindexedParser : Parser Variable
-folVarSupindexedParser =
-    Parser.succeed (\x y -> ( x, [], y ))
-        |= folTermNameParser
-        |. Parser.symbol "^{"
-        |= Parser.int
-        |. Parser.symbol "}"
-
-
-folVarSubSuperIndexedParser : Parser Variable
-folVarSubSuperIndexedParser =
-    Parser.succeed (\x y z -> ( x, y, z ))
-        |= folTermNameParser
-        |= Parser.sequence
-            { start = "_{"
-            , separator = ","
-            , end = "}"
-            , spaces = Parser.spaces
-            , item = Parser.int
-            , trailing = Forbidden
-            }
-        |. Parser.symbol "^{"
-        |= Parser.int
-        |. Parser.symbol "}"
-
-
 
 --================--
 -- REPRESENTATION --
@@ -1916,22 +1955,22 @@ ffolToString f =
             pname ++ (replaceBySubscript <| (String.join "," <| List.map String.fromInt pindices)) ++ termsToString ts
 
         Equal t1 t2 ->
-            termToString t1 ++ "=" ++ termToString t2
+            "(" ++ termToString t1 ++ " = " ++ termToString t2 ++ ")"
 
         Neg p ->
             "¬" ++ ffolToString p
 
         Conj p q ->
-            "(" ++ ffolToString p ++ "∧" ++ ffolToString q ++ ")"
+            "(" ++ ffolToString p ++ " ∧ " ++ ffolToString q ++ ")"
 
         Disj p q ->
-            "(" ++ ffolToString p ++ "∨" ++ ffolToString q ++ ")"
+            "(" ++ ffolToString p ++ " ∨ " ++ ffolToString q ++ ")"
 
         Impl p q ->
-            "(" ++ ffolToString p ++ "→" ++ ffolToString q ++ ")"
+            "(" ++ ffolToString p ++ " → " ++ ffolToString q ++ ")"
 
         Equi p q ->
-            "(" ++ ffolToString p ++ "↔" ++ ffolToString q ++ ")"
+            "(" ++ ffolToString p ++ " ↔ " ++ ffolToString q ++ ")"
 
         Exists v p ->
             "∃" ++ (termToString <| Var v) ++ ffolToString p
@@ -2037,34 +2076,34 @@ ffolToMathString f =
             pname ++ "_{ " ++ (String.join "," <| List.map String.fromInt pindices) ++ " }" ++ termsToMathString ts
 
         Equal t1 t2 ->
-            termToMathString t1 ++ " = " ++ termToMathString t2
+            " \\left( " ++ termToMathString t1 ++ " = " ++ termToMathString t2 ++ " \\right) "
 
         Neg p ->
-            "\\neg " ++ ffolToMathString p
+            " \\neg " ++ ffolToMathString p
 
         Conj p q ->
-            "( " ++ ffolToMathString p ++ " \\wedge " ++ ffolToMathString q ++ " )"
+            " \\left( " ++ ffolToMathString p ++ " \\wedge " ++ ffolToMathString q ++ " \\right) "
 
         Disj p q ->
-            "( " ++ ffolToMathString p ++ " \\vee " ++ ffolToMathString q ++ " )"
+            " \\left( " ++ ffolToMathString p ++ " \\vee " ++ ffolToMathString q ++ " \\right) "
 
         Impl p q ->
-            "( " ++ ffolToMathString p ++ " \\rightarrow " ++ ffolToMathString q ++ " )"
+            " \\left( " ++ ffolToMathString p ++ " \\rightarrow " ++ ffolToMathString q ++ " \\right) "
 
         Equi p q ->
-            "( " ++ ffolToMathString p ++ " \\leftrightarrow " ++ ffolToMathString q ++ " )"
+            " \\left( " ++ ffolToMathString p ++ " \\leftrightarrow " ++ ffolToMathString q ++ " \\right) "
 
         Exists v p ->
-            "\\exists " ++ (termToMathString <| Var v) ++ " \\," ++ ffolToMathString p
+            " \\exists " ++ (termToMathString <| Var v) ++ " \\," ++ ffolToMathString p
 
         Forall v p ->
-            "\\forall " ++ (termToMathString <| Var v) ++ " \\," ++ ffolToMathString p
+            " \\forall " ++ (termToMathString <| Var v) ++ " \\," ++ ffolToMathString p
 
         Taut ->
-            "\\top"
+            " \\top "
 
         Insat ->
-            "\\perp"
+            " \\perp "
 
 
 {-| It generates the string of a First Order Logic Set of formulas using latex notation as an array

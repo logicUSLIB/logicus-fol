@@ -1,4 +1,4 @@
-module LogicUS.AUX.AuxiliarFuctions exposing (cleanSpaces, powerset, replaceBySubscript, replaceBySuperscript, subscriptLetters, uniqueConcatList)
+module LogicUS.AUX.AuxiliarFuctions exposing (cleanSpaces, listRemoveAll, powerset, replaceBySubscript, replaceBySuperscript, subscriptLetters, uniqueConcatList)
 
 import Dict exposing (Dict)
 import List.Extra as LE
@@ -21,6 +21,11 @@ uniqueConcatList xs ys =
         )
         xs
         ys
+
+
+listRemoveAll : List a -> List a -> List a
+listRemoveAll l1 l2 =
+    List.filter (\x -> not <| List.member x l2) l1
 
 
 

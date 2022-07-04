@@ -86,6 +86,37 @@ type alias TableauEdgeItem =
 --====================--
 
 
+compareConstTerms : Term -> Term -> Order
+compareConstTerms t1 t2 =
+    let
+        t1Fs =
+            FOL_SS.termFuncSymbols t1
+
+        t2Fs =
+            FOL_SS.termFuncSymbols t2
+
+        t1Cs =
+            FOL_SS.termConstSymbols t1
+
+        t2Cs =
+            FOL_SS.termConstSymbols t2
+    in
+    if List.length t1Fs < List.length t2Fs then
+        LT
+
+    else if List.length t1Fs > List.length t2Fs then
+        GT
+
+    else if List.length t1Cs < List.length t2Cs then
+        LT
+
+    else if List.length t1Cs > List.length t2Cs then
+        GT
+
+    else
+        compare (FOL_SS.termToString t1) (FOL_SS.termToString t2)
+
+
 {-| It gives the class of a FOL formula. Atoms (predicates) and their negations are literals, double negation are typed as DN, conjunction, equivalence are classified as ALPHA, disjunction and implications are classified as BETA. forall-like formulas are classified as GAMMA and existencial-like ones as DELTA The negation of an alpha formula is a beta and vice versa, and the same happens with forall and exists like ones.
 -}
 ffolType : FormulaFOL -> FormulaFOLType
@@ -319,7 +350,9 @@ semanticTableauAux :
     -> Dict ( Int, Int ) (Maybe TableauEdgeItem)
     -> ( Dict Int ( Int, TableauNodeItem ), Dict ( Int, Int ) (Maybe TableauEdgeItem) )
 semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
+    -- 1. Search contradiction
     case searchContradiction <| Dict.toList nodes of
+        -- 1.1. If it is encountered, then STOP --> CLOSED BRANCH
         Just ( xig, xif ) ->
             let
                 dictNodes =
@@ -330,6 +363,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
             in
             ( dictNodes, dictEdges )
 
+        -- 2.
         Nothing ->
             if dcur == dMax then
                 let

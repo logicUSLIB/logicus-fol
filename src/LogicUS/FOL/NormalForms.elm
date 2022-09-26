@@ -1,8 +1,8 @@
 module LogicUS.FOL.NormalForms exposing
-    ( Cuantifier(..)
+    ( Quantifier(..)
     , ffolRemoveAllEquiv, ffolRemoveAllImpl, ffolInteriorizeNeg, ffolInteriorizeDisj, ffolInteriorizeConj
-    , ffolToPrenex, ffolToPrenex2, ffolIsPrenex, prenexGraphToDOT
-    , extractHeaderCuantifiers, getSkolemSubs, ffolToSkolem, sfolToSkolem
+    , ffolToPrenex, ffolToPrenex2, ffolIsPrenex, ffolApplyQuantifiers, prenexGraphToDOT
+    , extractHeaderQuantifiers, getSkolemSubs, ffolToSkolem, sfolToSkolem
     , ffolToNNF, ffolToCNF, ffolToDNF, sfolToNNF, sfolToCNF, sfolToDNF
     )
 
@@ -11,7 +11,7 @@ module LogicUS.FOL.NormalForms exposing
 
 # Defined types
 
-@docs Cuantifier
+@docs Quantifier
 
 
 # Formulas Equivalent Transformations
@@ -21,12 +21,12 @@ module LogicUS.FOL.NormalForms exposing
 
 # Prenex Form
 
-@docs ffolToPrenex, ffolToPrenex2, ffolIsPrenex, prenexGraphToDOT
+@docs ffolToPrenex, ffolToPrenex2, ffolIsPrenex, ffolApplyQuantifiers, prenexGraphToDOT
 
 
 # Skolem Form
 
-@docs extractHeaderCuantifiers, getSkolemSubs, ffolToSkolem, sfolToSkolem
+@docs extractHeaderQuantifiers, getSkolemSubs, ffolToSkolem, sfolToSkolem
 
 
 # NNF, CNF and DNF
@@ -37,10 +37,10 @@ module LogicUS.FOL.NormalForms exposing
 
 import Dict
 import Graph exposing (Edge, Graph, Node, nodes)
-import Graph.DOT exposing (defaultStyles)
+import Graph.DOT
 import List
 import List.Extra
-import LogicUS.FOL.SyntaxSemantics as FOL_SS exposing (FormulaFOL(..), SetFOL, Substitution, Term(..), Variable)
+import LogicUS.FOL.SyntaxSemantics as FOL_SS exposing (FormulaFOL(..), SetFOL, Substitution, Term(..), Variable, ffolApplySubstitution, ffolFreeVars)
 
 
 
@@ -48,9 +48,9 @@ import LogicUS.FOL.SyntaxSemantics as FOL_SS exposing (FormulaFOL(..), SetFOL, S
 -- Regular Functions
 
 
-{-| It represents the universal (all) and existencial (exists) cuantifier with the associated variable
+{-| It represents the universal (all) and existencial (exists) quantifier with the associated variable
 -}
-type Cuantifier
+type Quantifier
     = A Variable
     | E Variable
 
@@ -61,18 +61,18 @@ type Cuantifier
 
 type alias PrenexCalcResult =
     { nodes : List (Node FormulaFOL)
-    , edges : List (Edge ( Bool, List Cuantifier ))
-    , cuants : List Cuantifier
+    , edges : List (Edge ( Bool, List Quantifier ))
+    , cuants : List Quantifier
     , f : FormulaFOL
     }
 
 
 
--- It indicates if a cuantifier is exitencial-like
+-- It indicates if a quantifier is exitencial-like
 
 
-isECuantifier : Cuantifier -> Bool
-isECuantifier c =
+isEQuantifier : Quantifier -> Bool
+isEQuantifier c =
     case c of
         A _ ->
             False
@@ -82,11 +82,11 @@ isECuantifier c =
 
 
 
--- It gives the contrary cuantifier
+-- It gives the contrary quantifier
 
 
-contraryCuantifier : Cuantifier -> Cuantifier
-contraryCuantifier c =
+contraryQuantifier : Quantifier -> Quantifier
+contraryQuantifier c =
     case c of
         A x ->
             E x
@@ -96,11 +96,11 @@ contraryCuantifier c =
 
 
 
--- It cuantifies a formula with the cuantifier given
+-- It quantifies a formula with the quantifier given
 
 
-applyCuantifier : Cuantifier -> FormulaFOL -> FormulaFOL
-applyCuantifier c f =
+applyQuantifier : Quantifier -> FormulaFOL -> FormulaFOL
+applyQuantifier c f =
     case c of
         A x ->
             Forall x f
@@ -109,25 +109,23 @@ applyCuantifier c f =
             Exists x f
 
 
-
--- It cuantifies a formula with the cuantifiers given by following the reverse order on applying it (tail to head)
-
-
-applyCuantifiers : List Cuantifier -> FormulaFOL -> FormulaFOL
-applyCuantifiers cs f =
-    List.foldr applyCuantifier f cs
+{-| It quantifies a formula with the quantifiers given by following the reverse order on applying it (tail to head)
+-}
+ffolApplyQuantifiers : List Quantifier -> FormulaFOL -> FormulaFOL
+ffolApplyQuantifiers cs f =
+    List.foldr applyQuantifier f cs
 
 
 
--- It sort two list of cuantifiers by choosing first the existencial (keeping the order in the corresponding lists)
+-- It sort two list of quantifiers by choosing first the existencial (keeping the order in the corresponding lists)
 
 
-sortWithFirstE : List Cuantifier -> List Cuantifier -> List Cuantifier
+sortWithFirstE : List Quantifier -> List Quantifier -> List Quantifier
 sortWithFirstE l1 l2 =
     sortWithFirstEAux l1 l2 []
 
 
-sortWithFirstEAux : List Cuantifier -> List Cuantifier -> List Cuantifier -> List Cuantifier
+sortWithFirstEAux : List Quantifier -> List Quantifier -> List Quantifier -> List Quantifier
 sortWithFirstEAux l1 l2 res =
     case l1 of
         [] ->
@@ -147,10 +145,10 @@ sortWithFirstEAux l1 l2 res =
                 _ ->
                     let
                         ( xs1, ys1 ) =
-                            List.Extra.break (\x -> isECuantifier x) l1
+                            List.Extra.break (\x -> isEQuantifier x) l1
 
                         ( xs2, ys2 ) =
-                            List.Extra.break (\x -> isECuantifier x) l2
+                            List.Extra.break (\x -> isEQuantifier x) l2
                     in
                     if List.isEmpty ys2 then
                         res ++ l1 ++ xs2
@@ -169,22 +167,22 @@ sortWithFirstEAux l1 l2 res =
 -- FORMULA TRANSFORMATIONS
 
 
-{-| It allows extract all the external cuantifiers, especially interesting for applying over Prenex Form Formulas
+{-| It allows extract all the external quantifiers, especially interesting for applying over Prenex Form Formulas
 -}
-extractHeaderCuantifiers : FormulaFOL -> ( List Cuantifier, FormulaFOL )
-extractHeaderCuantifiers f =
+extractHeaderQuantifiers : FormulaFOL -> ( List Quantifier, FormulaFOL )
+extractHeaderQuantifiers f =
     case f of
         Forall x g ->
             let
                 ( cuants, h ) =
-                    extractHeaderCuantifiers g
+                    extractHeaderQuantifiers g
             in
             ( A x :: cuants, h )
 
         Exists x g ->
             let
                 ( cuants, h ) =
-                    extractHeaderCuantifiers g
+                    extractHeaderQuantifiers g
             in
             ( E x :: cuants, h )
 
@@ -270,7 +268,7 @@ ffolRemoveAllImpl f =
             Taut
 
 
-{-| It interiorizes negations applying the De Morgan Rule and the rule of negation of the cuantifier
+{-| It interiorizes negations applying the De Morgan Rule and the rule of negation of the quantifier
 -}
 ffolInteriorizeNeg : FormulaFOL -> FormulaFOL
 ffolInteriorizeNeg f =
@@ -435,7 +433,7 @@ ffolToPrenex f =
     in
     let
         f2 =
-            FOL_SS.renameVars f1
+            FOL_SS.ffolRenameVars f1
     in
     let
         f3 =
@@ -445,12 +443,12 @@ ffolToPrenex f =
         ret1 =
             ffolToPrenexAux 3 f3
     in
-    applyCuantifiers ret1.cuants ret1.f
+    ffolApplyQuantifiers ret1.cuants ret1.f
 
 
-{-| It transforms a FOL Formula into one equivalent Prenex Form. It gives the list of cuantifiers and the open formula of the Prenex Form. It also gives a Graph with the Prenex form calculus
+{-| It transforms a FOL Formula into one equivalent Prenex Form. It gives the list of quantifiers and the open formula of the Prenex Form. It also gives a Graph with the Prenex form calculus
 -}
-ffolToPrenex2 : FormulaFOL -> ( List Cuantifier, FormulaFOL, Graph FormulaFOL ( Bool, List Cuantifier ) )
+ffolToPrenex2 : FormulaFOL -> ( List Quantifier, FormulaFOL, Graph FormulaFOL ( Bool, List Quantifier ) )
 ffolToPrenex2 f =
     let
         f1 =
@@ -458,7 +456,7 @@ ffolToPrenex2 f =
     in
     let
         f2 =
-            FOL_SS.renameVars f1
+            FOL_SS.ffolRenameVars f1
     in
     let
         f3 =
@@ -469,52 +467,74 @@ ffolToPrenex2 f =
             ffolToPrenexAux 4 f3
     in
     let
-        nodes_res =
-            (if f == f3 then
-                []
-
-             else
+        nodes_extra =
+            (if f /= f3 then
                 [ Node 1 f ]
-            )
-                ++ (if f == f1 then
-                        []
-
-                    else
-                        [ Node 2 f1 ]
-                   )
-                ++ (if f1 == f2 then
-                        []
-
-                    else
-                        [ Node 3 f2 ]
-                   )
-                ++ ret1.nodes
-
-        edges_res =
-            (if f /= f1 then
-                [ Edge 1 2 ( False, [] ) ]
 
              else
                 []
             )
-                ++ (if f1 /= f2 then
-                        [ Edge 2 3 ( False, [] ), Edge 3 4 ( False, [] ) ]
-
-                    else if f /= f1 then
-                        [ Edge 2 4 ( False, [] ) ]
-
-                    else if f /= f3 then
-                        [ Edge 1 4 ( False, [] ) ]
+                ++ (if f1 /= f && f1 /= f3 then
+                        [ Node 2 f1 ]
 
                     else
                         []
                    )
-                ++ ret1.edges
+                ++ (if f2 /= f1 && f2 /= f3 then
+                        [ Node 3 f2 ]
+
+                    else
+                        []
+                   )
     in
-    ( ret1.cuants, ret1.f, Graph.fromNodesAndEdges nodes_res edges_res )
+    let
+        edges_extra =
+            if List.isEmpty nodes_extra then
+                []
+
+            else
+                Tuple.second <| List.foldr (\n ( j, es ) -> ( n.id, Edge n.id j ( False, [] ) :: es )) ( 4, [] ) nodes_extra
+    in
+    ( ret1.cuants, ret1.f, Graph.fromNodesAndEdges (nodes_extra ++ ret1.nodes) (edges_extra ++ ret1.edges) )
 
 
 
+-- let
+--     nodes_res =
+--         (if f == f3 then
+--             []
+--          else
+--             [ Node 1 f ]
+--         )
+--             ++ (if f == f1 then
+--                     []
+--                 else
+--                     [ Node 2 f1 ]
+--                )
+--             ++ (if f1 == f2 then
+--                     []
+--                 else
+--                     [ Node 3 f2 ]
+--                )
+--             ++
+--     edges_res =
+--         (if f /= f1 then
+--             [ Edge 1 2 ( False, [] ) ]
+--          else
+--             []
+--         )
+--             ++ (if f1 /= f2 then
+--                     [ Edge 2 3 ( False, [] ), Edge 3 4 ( False, [] ) ]
+--                 else if f /= f1 then
+--                     [ Edge 2 4 ( False, [] ) ]
+--                 else if f /= f3 then
+--                     [ Edge 1 4 ( False, [] ) ]
+--                 else
+--                     []
+--                )
+--             ++ ret1.edges
+-- in
+-- ( ret1.cuants, ret1.f, Graph.fromNodesAndEdges nodes_res edges_res )
 -- It calculates Prenex Form of a Formula
 
 
@@ -547,7 +567,7 @@ ffolToPrenexAux nid f =
             in
             let
                 nodes =
-                    [ Node nid f, Node (max_nid2 + 1) (applyCuantifiers cuants <| openFormula) ] ++ ret1.nodes ++ ret2.nodes
+                    [ Node nid f, Node (max_nid2 + 1) (ffolApplyQuantifiers cuants <| openFormula) ] ++ ret1.nodes ++ ret2.nodes
 
                 edges =
                     [ Edge nid (nid + 1) ( False, [] )
@@ -586,7 +606,7 @@ ffolToPrenexAux nid f =
             in
             let
                 nodes =
-                    [ Node nid f, Node (max_nid2 + 1) (applyCuantifiers cuants <| openFormula) ] ++ ret1.nodes ++ ret2.nodes
+                    [ Node nid f, Node (max_nid2 + 1) (ffolApplyQuantifiers cuants <| openFormula) ] ++ ret1.nodes ++ ret2.nodes
 
                 edges =
                     [ Edge nid (nid + 1) ( False, [] )
@@ -618,19 +638,19 @@ ffolToPrenexAux nid f =
             in
             let
                 cuants =
-                    sortWithFirstE (List.map contraryCuantifier ret1.cuants) ret2.cuants
+                    sortWithFirstE (List.map contraryQuantifier ret1.cuants) ret2.cuants
 
                 openFormula =
                     Impl ret1.f ret2.f
             in
             let
                 nodes =
-                    [ Node nid f, Node (max_nid2 + 1) (applyCuantifiers cuants <| openFormula) ] ++ ret1.nodes ++ ret2.nodes
+                    [ Node nid f, Node (max_nid2 + 1) (ffolApplyQuantifiers cuants <| openFormula) ] ++ ret1.nodes ++ ret2.nodes
 
                 edges =
                     [ Edge nid (nid + 1) ( False, [] )
                     , Edge nid (max_nid1 + 1) ( False, [] )
-                    , Edge max_nid1 (max_nid2 + 1) ( True, List.map contraryCuantifier ret1.cuants )
+                    , Edge max_nid1 (max_nid2 + 1) ( True, List.map contraryQuantifier ret1.cuants )
                     , Edge max_nid2 (max_nid2 + 1) ( False, ret2.cuants )
                     ]
                         ++ ret1.edges
@@ -641,7 +661,7 @@ ffolToPrenexAux nid f =
         g ->
             let
                 ( cuants1, h ) =
-                    extractHeaderCuantifiers g
+                    extractHeaderQuantifiers g
             in
             if FOL_SS.ffolIsOpen h then
                 { nodes = [ Node nid f ], edges = [], cuants = cuants1, f = h }
@@ -660,7 +680,7 @@ ffolToPrenexAux nid f =
                 in
                 let
                     nodes =
-                        [ Node nid f, Node (max_nid1 + 1) (applyCuantifiers cuants <| ret1.f) ] ++ ret1.nodes
+                        [ Node nid f, Node (max_nid1 + 1) (ffolApplyQuantifiers cuants <| ret1.f) ] ++ ret1.nodes
 
                     edges =
                         [ Edge nid (nid + 1) ( False, [] ), Edge max_nid1 (max_nid1 + 1) ( False, [] ) ] ++ ret1.edges
@@ -709,13 +729,10 @@ ffolIsPrenex f =
 
 {-| It allows represent the Prenex Calculus Graph as DOT string, which could be rendered by GraphViz
 -}
-prenexGraphToDOT : Graph FormulaFOL ( Bool, List Cuantifier ) -> String
+prenexGraphToDOT : Graph FormulaFOL ( Bool, List Quantifier ) -> String
 prenexGraphToDOT g =
     let
-        myStyles =
-            { defaultStyles | node = "shape=box, color=white, fontcolor=black", edge = "dir=none, color=blue, fontcolor=blue" }
-
-        toStringCuantifier c =
+        toStringQuantifier c =
             case c of
                 A t ->
                     "∀" ++ FOL_SS.termToString (Var t)
@@ -724,37 +741,33 @@ prenexGraphToDOT g =
                     "∃" ++ FOL_SS.termToString (Var t)
     in
     String.replace "\n" "" <|
-        String.replace "\"" ">" <|
-            String.replace "=\"" "=<" <|
-                String.replace "label=\"*" "xlabel=\"" <|
-                    Graph.DOT.outputWithStyles
-                        myStyles
-                        (Just << FOL_SS.ffolToString)
-                        (\( cent, xs ) ->
-                            if xs == [] then
-                                Nothing
+        Graph.DOT.output
+            (Just << FOL_SS.ffolToString)
+            (\( cent, xs ) ->
+                if xs == [] then
+                    Nothing
 
-                            else
-                                Just <|
-                                    (if cent then
-                                        "*"
+                else
+                    Just <|
+                        (if cent then
+                            "*"
 
-                                     else
-                                        ""
-                                    )
-                                        ++ (String.join "," <| List.map toStringCuantifier xs)
+                         else
+                            ""
                         )
-                    <|
-                        g
+                            ++ (String.join "," <| List.map toStringQuantifier xs)
+            )
+        <|
+            g
 
 
 
 -- SKOLEM FORM
 
 
-{-| It gives the Skolem functions correspondence of a list of cuantifiers
+{-| It gives the Skolem functions correspondence of a list of quantifiers
 -}
-getSkolemSubs : List Cuantifier -> Substitution
+getSkolemSubs : List Quantifier -> Substitution
 getSkolemSubs cS =
     let
         ( subs, _, _ ) =
@@ -777,49 +790,138 @@ getSkolemSubs cS =
     subs
 
 
-{-| It calculates the Skolem Form of a Formula
+{-| It calculates the Skolem Form of a Formula, by prenexization plus the introduction of skolem functions
 -}
 ffolToSkolem : FormulaFOL -> FormulaFOL
 ffolToSkolem f =
     if ffolIsPrenex f then
         let
             ( lc, g ) =
-                extractHeaderCuantifiers f
+                extractHeaderQuantifiers f
         in
         FOL_SS.ffolApplySubstitution (getSkolemSubs lc) g
 
     else
         let
-            ( cs, fo, _ ) =
-                ffolToPrenex2 f
+            f1 =
+                ffolRemoveAllEquiv f
         in
-        FOL_SS.ffolApplySubstitution (getSkolemSubs cs) fo
+        let
+            f2 =
+                FOL_SS.ffolRenameVars f1
+        in
+        let
+            f3 =
+                ffolInteriorizeNeg f2
+        in
+        ffolToPrenex <| Tuple.first <| ffolToSkolem2Aux True 1 f3
 
 
-{-| It calculates the Skolem Forms of the formulas of a set
+
+{- It transforms a formula from a FOL into an equiconsistent formula with replacing existential quantifiers by skolem functions depending on the free variables that occurs in the corresponding subformula. -}
+
+
+ffolToSkolem2Aux : Bool -> Int -> FormulaFOL -> ( FormulaFOL, Int )
+ffolToSkolem2Aux b i f =
+    case f of
+        Conj g h ->
+            let
+                ( f1, i1 ) =
+                    ffolToSkolem2Aux b i g
+            in
+            let
+                ( f2, i2 ) =
+                    ffolToSkolem2Aux b i1 h
+            in
+            ( Conj f1 f2, i2 )
+
+        Disj g h ->
+            let
+                ( f1, i1 ) =
+                    ffolToSkolem2Aux b i g
+            in
+            let
+                ( f2, i2 ) =
+                    ffolToSkolem2Aux b i1 h
+            in
+            ( Disj f1 f2, i2 )
+
+        Impl g h ->
+            let
+                ( f1, i1 ) =
+                    ffolToSkolem2Aux (not b) i g
+            in
+            let
+                ( f2, i2 ) =
+                    ffolToSkolem2Aux b i1 h
+            in
+            ( Impl f1 f2, i2 )
+
+        Exists v g ->
+            if b then
+                let
+                    ls =
+                        ffolFreeVars f
+                in
+                let
+                    ss =
+                        Dict.singleton v (Func ( "ş", [ i ] ) <| List.map Var ls)
+                in
+                let
+                    h =
+                        ffolApplySubstitution ss g
+                in
+                ffolToSkolem2Aux b (i + 1) h
+
+            else
+                let
+                    ( h, i1 ) =
+                        ffolToSkolem2Aux b i g
+                in
+                ( h, i1 )
+
+        Forall v g ->
+            if b then
+                let
+                    ( h, i1 ) =
+                        ffolToSkolem2Aux b i g
+                in
+                ( h, i1 )
+
+            else
+                let
+                    ls =
+                        ffolFreeVars f
+                in
+                let
+                    ss =
+                        Dict.singleton v (Func ( "ş", [ i ] ) <| List.map Var ls)
+                in
+                let
+                    h =
+                        ffolApplySubstitution ss g
+                in
+                ffolToSkolem2Aux b (i + 1) h
+
+        _ ->
+            ( f, i )
+
+
+{-| It calculates the Skolem Forms of the formulas of a set (by using ffolToSkolem2)
 -}
 sfolToSkolem : SetFOL -> SetFOL
-sfolToSkolem =
-    List.indexedMap
-        (\i x ->
-            let
-                ( cs, fo, _ ) =
-                    ffolToPrenex2 x
-            in
-            FOL_SS.ffolApplySubstitution
-                (Dict.map
-                    (\_ v ->
-                        case v of
-                            Func ( ident, indices ) ts ->
-                                Func ( ident, i :: indices ) ts
-
-                            _ ->
-                                v
-                    )
-                    (getSkolemSubs cs)
-                )
-                fo
-        )
+sfolToSkolem fs =
+    Tuple.first <|
+        List.foldl
+            (\f ( ls, i ) ->
+                let
+                    ( g, j ) =
+                        ffolToSkolem2Aux True i f
+                in
+                ( ls ++ [ g ], j )
+            )
+            ( [], 1 )
+            fs
 
 
 
@@ -830,14 +932,14 @@ sfolToSkolem =
 -}
 ffolToNNF : FormulaFOL -> FormulaFOL
 ffolToNNF f =
-    ffolInteriorizeNeg <| ffolRemoveAllImpl <| ffolRemoveAllEquiv <| ffolToSkolem f
+    (ffolToSkolem << ffolInteriorizeNeg << ffolRemoveAllImpl << ffolRemoveAllEquiv) f
 
 
 {-| It calculates negative normal forms of formulas of a set
 -}
 sfolToNNF : SetFOL -> SetFOL
-sfolToNNF f =
-    List.map (ffolInteriorizeNeg << ffolRemoveAllImpl << ffolRemoveAllEquiv) <| sfolToSkolem f
+sfolToNNF fs =
+    sfolToSkolem <| List.map (ffolInteriorizeNeg << ffolRemoveAllImpl << ffolRemoveAllEquiv) fs
 
 
 {-| It calculates a conjuctive normal form of a formula
@@ -850,8 +952,8 @@ ffolToCNF f =
 {-| It calculates conjuctive normal forms of formulas of a set
 -}
 sfolToCNF : SetFOL -> SetFOL
-sfolToCNF f =
-    List.map (ffolInteriorizeDisj << ffolInteriorizeNeg << ffolRemoveAllImpl << ffolRemoveAllEquiv) <| sfolToSkolem f
+sfolToCNF fs =
+    List.map ffolInteriorizeDisj <| sfolToNNF fs
 
 
 {-| It calculates a disjuntive normal form of a formula
@@ -864,5 +966,5 @@ ffolToDNF f =
 {-| It calculates disjunctive normal forms of formulas of a set
 -}
 sfolToDNF : SetFOL -> SetFOL
-sfolToDNF f =
-    List.map (ffolInteriorizeConj << ffolInteriorizeNeg << ffolRemoveAllImpl << ffolRemoveAllEquiv) <| sfolToSkolem f
+sfolToDNF fs =
+    List.map ffolInteriorizeConj <| sfolToNNF fs

@@ -1,22 +1,22 @@
 module LogicUS.FOL.SyntaxSemantics exposing
-    ( Ident, Variable, Term(..), FormulaFOL(..), SetFOL, ffolNegation, termVarSymbols, termsVarSymbols, ffolVarSymbols, termConstSymbols, termsConstSymbols, ffolConstSymbols, termFuncSymbols, termsFuncSymbols, ffolFuncSymbols, ffolPredSymbols, ffolContainsEquality, ffolFormTree, ffolIsWellFormed, ffolHasInstanceOfVar, ffolHasFreeInstanceOfVar, ffolHasLinkedInstanceOfVar, ffolFreeVars, ffolLinkedVars, termIsClosed, termClosedTerms, termsClosedTerms, ffolAllClosedTerms, ffolIsOpen, ffolIsClosed
-    , Substitution, substitutionDomain, termApplySubstitution, ffolApplySubstitution, substitutionComposition, renameVars, ffolUniversalClausure, ffolExistencialClausure
+    ( Ident, Variable, Term(..), FormulaFOL(..), SetFOL, ffolNegation, termVarSymbols, termsVarSymbols, ffolVarSymbols, termConstSymbols, termsConstSymbols, ffolConstSymbols, termFuncSymbols, termsFuncSymbols, ffolFuncSymbols, ffolPredSymbols, ffolContainsEquality, ffolFormTree, ffolIsWellFormed, ffolHasInstanceOfVar, ffolHasFreeInstanceOfVar, ffolHasLinkedInstanceOfVar, ffolFreeVars, ffolLinkedVars, termIsClosed, termClosedTerms, termsClosedTerms, ffolAllClosedTerms, ffolIsOpen, ffolIsClosed, sfolNegation, sfolConjunction, sfolDisjunction
+    , Substitution, substitutionDomain, termApplySubstitution, ffolApplySubstitution, substitutionComposition, ffolRenameVars, ffolUniversalClosure, ffolExistentialClosure
     , L_Structure, lStructureIsValid, termInterpretation, termsInterpretation, ffolValuation, sfolInterpretation
     , ffolReadFromString, ffolReadExtraction, ffolRead, sfolRead, ffolToInputString, substitutionReadFromString, substitutionReadExtraction, substitutionToInputString
     , varToString, varsToString, varToMathString, varsToMathString, identToString, identsToString, identToMathString, identsToMathString, termToString, termsToString, termToMathString, termsToMathString, ffolToString, sfolToString, ffolToMathString, sfolToMathString, sfolToMathString2, formTreeToString, formTreeToDOT, substitutionToString, substitutionToMathString, l_StructureToString
     )
 
-{-| The module provides the elementary tools for working with first order logic. It allows defining both formulas and sets as well as performing some basic operations on them, such as evaluations regarding interpretations, performs substitutions, clausures, ...
+{-| The module provides the elementary tools for working with first order logic. It allows defining both formulas and sets as well as performing some basic operations on them, such as evaluations regarding interpretations, performs substitutions, closures, ...
 
 
 # FOL Formulas and Sets
 
-@docs Ident, Variable, Term, FormulaFOL, SetFOL, ffolNegation, termVarSymbols, termsVarSymbols, ffolVarSymbols, termConstSymbols, termsConstSymbols, ffolConstSymbols, termFuncSymbols, termsFuncSymbols, ffolFuncSymbols, ffolPredSymbols, ffolContainsEquality, ffolFormTree, ffolIsWellFormed, ffolHasInstanceOfVar, ffolHasFreeInstanceOfVar, ffolHasLinkedInstanceOfVar, ffolFreeVars, ffolLinkedVars, termIsClosed, termClosedTerms, termsClosedTerms, ffolAllClosedTerms, ffolIsOpen, ffolIsClosed
+@docs Ident, Variable, Term, FormulaFOL, SetFOL, ffolNegation, termVarSymbols, termsVarSymbols, ffolVarSymbols, termConstSymbols, termsConstSymbols, ffolConstSymbols, termFuncSymbols, termsFuncSymbols, ffolFuncSymbols, ffolPredSymbols, ffolContainsEquality, ffolFormTree, ffolIsWellFormed, ffolHasInstanceOfVar, ffolHasFreeInstanceOfVar, ffolHasLinkedInstanceOfVar, ffolFreeVars, ffolLinkedVars, termIsClosed, termClosedTerms, termsClosedTerms, ffolAllClosedTerms, ffolIsOpen, ffolIsClosed, sfolNegation, sfolConjunction, sfolDisjunction
 
 
-# Substitutions, variable rename and clausure
+# Substitutions, variable rename and closure
 
-@docs Substitution, substitutionDomain, termApplySubstitution, ffolApplySubstitution, substitutionComposition, renameVars, ffolUniversalClausure, ffolExistencialClausure
+@docs Substitution, substitutionDomain, termApplySubstitution, ffolApplySubstitution, substitutionComposition, ffolRenameVars, ffolUniversalClosure, ffolExistentialClosure
 
 
 # L-structures and valuations
@@ -43,8 +43,7 @@ import Dict exposing (Dict)
 import Graph exposing (Edge, Graph, Node, NodeId)
 import Graph.DOT exposing (defaultStyles)
 import List.Extra as LE
-import LogicUS.AUX.AuxiliarFuctions exposing (replaceBySubscript, replaceBySuperscript, uniqueConcatList)
-import LogicUS.AUX.B_Expressions exposing (B_Expr(..))
+import LogicUS.FOL.AuxiliarFuctions exposing (replaceBySubscript, replaceBySuperscript, uniqueConcatList)
 import Maybe.Extra as ME
 import Parser exposing ((|.), (|=), Parser, Trailing(..), succeed)
 import Set exposing (Set)
@@ -75,7 +74,7 @@ type Term
     | Func Ident (List Term)
 
 
-{-| It is a recursive definition of a formula in First Order Logic. It could be a predicate, equality, universal cuantification, existencial cuantificacation, negation, conjuction, implication, equivalence and unsatisfiable formula
+{-| It is a recursive definition of a formula in First Order Logic. It could be a predicate, equality, universal quantification, existential quantificacation, negation, conjuction, implication, equivalence and unsatisfiable formula
 -}
 type FormulaFOL
     = Pred Ident (List Term)
@@ -569,7 +568,7 @@ formTreeAux x nodeid =
             ( [ Node nodeid x ], [] )
 
 
-{-| It indicates if a formula is well formed or not. A formula is well formed if it doesn't contain two nested cuantifiers over the same variable
+{-| It indicates if a formula is well formed or not. A formula is well formed if it doesn't contain two nested quantifiers over the same variable
 
     f3 = ffolReadExtraction <| ffolReadFromString "!A[x] !A[y] (M(x,y) -> !E[x] F(x, _jhon) & P(x,x) | P(y,x))"
 
@@ -816,7 +815,7 @@ ffolAllClosedTerms f =
             []
 
 
-{-| It determinates if a formula is opened this is if it doesn't contains any cuantifier
+{-| It determinates if a formula is opened this is if it doesn't contains any quantifier
 -}
 ffolIsOpen : FormulaFOL -> Bool
 ffolIsOpen f =
@@ -933,10 +932,10 @@ substitutionComposition s1 s2 =
                 ++ List.filter (\( x1, _ ) -> not (Dict.member x1 s2)) (Dict.toList s1)
 
 
-{-| It renames variables in a formula if it is necessary. If a instance is linked to several cuantifiers (non well formed formula) it takes the nearest one as reference.
+{-| It renames variables in a formula if it is necessary. If a instance is linked to several quantifiers (non well formed formula) it takes the nearest one as reference.
 -}
-renameVars : FormulaFOL -> FormulaFOL
-renameVars f =
+ffolRenameVars : FormulaFOL -> FormulaFOL
+ffolRenameVars f =
     let
         aux g cur hist =
             case g of
@@ -1059,11 +1058,11 @@ renameVars f =
         uniqueVars =
             Dict.fromList <| List.map (\( x, i, z ) -> ( ( x, i, z ), Var ( x, i, 0 ) )) <| List.filter (\( x, i, s ) -> List.all (\( y, i2, s2 ) -> (y /= x) || (i /= i2) || (s == s2)) renamedVars) <| renamedVars
     in
-    ffolSubstitutionCuantifiedVars uniqueVars renamed
+    ffolSubstitutionQuantifiedVars uniqueVars renamed
 
 
-ffolSubstitutionCuantifiedVars : Substitution -> FormulaFOL -> FormulaFOL
-ffolSubstitutionCuantifiedVars subs g =
+ffolSubstitutionQuantifiedVars : Substitution -> FormulaFOL -> FormulaFOL
+ffolSubstitutionQuantifiedVars subs g =
     case g of
         Pred _ _ ->
             ffolApplySubstitution subs g
@@ -1072,43 +1071,43 @@ ffolSubstitutionCuantifiedVars subs g =
             ffolApplySubstitution subs g
 
         Neg h ->
-            Neg (ffolSubstitutionCuantifiedVars subs h)
+            Neg (ffolSubstitutionQuantifiedVars subs h)
 
         Conj h i ->
             Conj
-                (ffolSubstitutionCuantifiedVars subs h)
-                (ffolSubstitutionCuantifiedVars subs i)
+                (ffolSubstitutionQuantifiedVars subs h)
+                (ffolSubstitutionQuantifiedVars subs i)
 
         Disj h i ->
             Disj
-                (ffolSubstitutionCuantifiedVars subs h)
-                (ffolSubstitutionCuantifiedVars subs i)
+                (ffolSubstitutionQuantifiedVars subs h)
+                (ffolSubstitutionQuantifiedVars subs i)
 
         Impl h i ->
             Impl
-                (ffolSubstitutionCuantifiedVars subs h)
-                (ffolSubstitutionCuantifiedVars subs i)
+                (ffolSubstitutionQuantifiedVars subs h)
+                (ffolSubstitutionQuantifiedVars subs i)
 
         Equi h i ->
             Equi
-                (ffolSubstitutionCuantifiedVars subs h)
-                (ffolSubstitutionCuantifiedVars subs i)
+                (ffolSubstitutionQuantifiedVars subs h)
+                (ffolSubstitutionQuantifiedVars subs i)
 
         Forall ( xn, xsbi, xspi ) h ->
             case Dict.get ( xn, xsbi, xspi ) subs of
                 Just (Var v) ->
-                    Forall v (ffolSubstitutionCuantifiedVars subs h)
+                    Forall v (ffolSubstitutionQuantifiedVars subs h)
 
                 _ ->
-                    Forall ( xn, xsbi, xspi ) (ffolSubstitutionCuantifiedVars subs h)
+                    Forall ( xn, xsbi, xspi ) (ffolSubstitutionQuantifiedVars subs h)
 
         Exists ( xn, xsbi, xspi ) h ->
             case Dict.get ( xn, xsbi, xspi ) subs of
                 Just (Var v) ->
-                    Exists v (ffolSubstitutionCuantifiedVars subs h)
+                    Exists v (ffolSubstitutionQuantifiedVars subs h)
 
                 _ ->
-                    Exists ( xn, xsbi, xspi ) (ffolSubstitutionCuantifiedVars subs h)
+                    Exists ( xn, xsbi, xspi ) (ffolSubstitutionQuantifiedVars subs h)
 
         Taut ->
             Taut
@@ -1117,26 +1116,26 @@ ffolSubstitutionCuantifiedVars subs g =
             Insat
 
 
-{-| It gives the universal clausure of a formula
+{-| It gives the universal closure of a formula
 -}
-ffolUniversalClausure : FormulaFOL -> FormulaFOL
-ffolUniversalClausure f =
+ffolUniversalClosure : FormulaFOL -> FormulaFOL
+ffolUniversalClosure f =
     let
         openVars =
             List.filter (\v -> ffolHasFreeInstanceOfVar f v) <| ffolVarSymbols f
     in
-    renameVars <| List.foldl (\x ac -> Forall x ac) f openVars
+    ffolRenameVars <| List.foldl (\x ac -> Forall x ac) f openVars
 
 
-{-| It gives the existencial clausure of a formula
+{-| It gives the existential closure of a formula
 -}
-ffolExistencialClausure : FormulaFOL -> FormulaFOL
-ffolExistencialClausure f =
+ffolExistentialClosure : FormulaFOL -> FormulaFOL
+ffolExistentialClosure f =
     let
         openVars =
             List.filter (\v -> ffolHasFreeInstanceOfVar f v) <| ffolVarSymbols f
     in
-    renameVars <| List.foldl (\x ac -> Exists x ac) f openVars
+    ffolRenameVars <| List.foldl (\x ac -> Exists x ac) f openVars
 
 
 
@@ -1676,21 +1675,33 @@ ffolParserAux : Parser FormulaFOL
 ffolParserAux =
     Parser.oneOf
         [ Parser.succeed Exists
-            |. Parser.symbol "!E"
+            |. Parser.oneOf
+                [ Parser.symbol "!E"
+                , Parser.symbol "∃"
+                ]
             |. Parser.symbol "["
             |= folVariableParser
             |. Parser.symbol "]"
             |= Parser.lazy (\_ -> ffolParserAux)
         , Parser.succeed Forall
-            |. Parser.symbol "!A"
+            |. Parser.oneOf
+                [ Parser.symbol "!A"
+                , Parser.symbol "∀"
+                ]
             |. Parser.symbol "["
             |= folVariableParser
             |. Parser.symbol "]"
             |= Parser.lazy (\_ -> ffolParserAux)
         , Parser.succeed Insat
-            |. Parser.symbol "!F"
+            |. Parser.oneOf
+                [ Parser.symbol "!F"
+                , Parser.symbol "⊥"
+                ]
         , Parser.succeed Taut
-            |. Parser.symbol "!T"
+            |. Parser.oneOf
+                [ Parser.symbol "!T"
+                , Parser.symbol "⊤"
+                ]
         , Parser.backtrackable <|
             Parser.succeed Equal
                 |= folTermParser
@@ -1728,12 +1739,20 @@ operator =
     Parser.oneOf
         [ Parser.succeed AndOp
             |. Parser.symbol "&"
+        , Parser.succeed AndOp
+            |. Parser.symbol "∧"
         , Parser.succeed OrOp
             |. Parser.symbol "|"
+        , Parser.succeed OrOp
+            |. Parser.symbol "∨"
         , Parser.succeed ImplOp
             |. Parser.symbol "->"
+        , Parser.succeed ImplOp
+            |. Parser.symbol "→"
         , Parser.succeed EquivOp
             |. Parser.symbol "<->"
+        , Parser.succeed EquivOp
+            |. Parser.symbol "↔"
         ]
 
 
@@ -2199,3 +2218,34 @@ l_StructureToString ( u, i ) ra =
             String.join "\n" <| List.map pString <| List.map (\( x, y ) -> ( ffolToString (Pred x []), y )) <| Dict.toList i.pred
     in
     String.join "\n\n" [ universeString, constString, funcString, predString ]
+
+
+{-| It transforms a SetFOL into a new SetFOL by negating each formula of the set.
+-}
+sfolNegation : SetFOL -> SetFOL
+sfolNegation =
+    List.map ffolNegation
+
+
+{-| It transforms a SetFOL into a FormulaFOL using conjuction between formulas. If Set is empty Taut is given
+-}
+sfolConjunction : SetFOL -> FormulaFOL
+sfolConjunction fs =
+    case fs of
+        [] ->
+            Taut
+
+        x :: xs ->
+            List.foldl (\f ac -> Conj ac f) x xs
+
+
+{-| It transforms a SetPL into a FormulaFOL using disjunction between formulas. If Set is empty Insat is given
+-}
+sfolDisjunction : SetFOL -> FormulaFOL
+sfolDisjunction fs =
+    case fs of
+        [] ->
+            Insat
+
+        x :: xs ->
+            List.foldl (\f ac -> Disj ac f) x xs

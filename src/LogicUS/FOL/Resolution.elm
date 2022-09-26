@@ -28,7 +28,7 @@ import Dict exposing (Dict)
 import Graph exposing (Edge, Graph, Node)
 import Graph.DOT as GDOT exposing (defaultStyles)
 import List.Extra as LE
-import LogicUS.AUX.AuxiliarFuctions exposing (uniqueConcatList)
+import LogicUS.FOL.AuxiliarFuctions exposing (uniqueConcatList)
 import LogicUS.FOL.Clauses as FOL_CL exposing (ClauseFOL, ClauseFOLLiteral)
 import LogicUS.FOL.SyntaxSemantics as FOL_SS exposing (Substitution, Term(..))
 import LogicUS.FOL.Unification as FOL_UN
@@ -724,9 +724,6 @@ resolutionTableauToString g =
 resolutionTableauToDOT : ResolutionTableau -> String
 resolutionTableauToDOT g =
     let
-        myStyles =
-            { defaultStyles | node = "shape=box, color=white, fontcolor=black", edge = "dir=none, color=blue, fontcolor=blue" }
-
         toStringNode =
             \( _, cs ) -> Just <| FOL_CL.cfolToString cs
 
@@ -758,4 +755,4 @@ resolutionTableauToDOT g =
                         []
                         (Graph.nodes g)
     in
-    String.replace "\n" "" <| String.replace "\"" ">" <| String.replace "=\"" "=<" <| String.replace "\n}" ("\n\n  {rank=same; " ++ initialNodes ++ ";}\n}") <| GDOT.outputWithStyles myStyles toStringNode toStringEdge g
+    String.replace "\n" "" <| String.replace "\n}" ("\n\n  {rank=same; " ++ initialNodes ++ ";}\n}") <| GDOT.output toStringNode toStringEdge g

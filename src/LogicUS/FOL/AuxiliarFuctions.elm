@@ -1,4 +1,4 @@
-module LogicUS.AUX.AuxiliarFuctions exposing (cleanSpaces, listRemoveAll, powerset, replaceBySubscript, replaceBySuperscript, subscriptLetters, uniqueConcatList)
+module LogicUS.FOL.AuxiliarFuctions exposing (cleanSpaces, listRemoveAll, powerset, replaceBySubscript, replaceBySuperscript, subscriptLetters, uniqueConcatList)
 
 import Dict exposing (Dict)
 import List.Extra as LE

@@ -1,6 +1,6 @@
 module LogicUS.FOL.SemanticTableaux exposing
     ( FormulaFOLType, FOLSemanticTableau, TableauNodeItem, TableauEdgeItem
-    , ffolType, ffolUncuantifiedComponents, ffolCuantifiedComponents
+    , ffolType, ffolUnquantifiedComponents, ffolQuantifiedComponents
     , semanticTableau, semanticTableauIsInsat, semanticTableauRUNII
     , semanticTableauToString, semanticTableauToDOT
     )
@@ -15,7 +15,7 @@ module LogicUS.FOL.SemanticTableaux exposing
 
 # Formulas types and components
 
-@docs ffolType, ffolUncuantifiedComponents, ffolCuantifiedComponents
+@docs ffolType, ffolUnquantifiedComponents, ffolQuantifiedComponents
 
 
 # Semantic Tableau Algorithm
@@ -33,7 +33,7 @@ import Dict exposing (Dict)
 import Graph exposing (Edge, Graph, Node, nodes)
 import Graph.DOT exposing (defaultStyles)
 import List.Extra as LE
-import LogicUS.AUX.AuxiliarFuctions exposing (replaceBySubscript, uniqueConcatList)
+import LogicUS.FOL.AuxiliarFuctions exposing (replaceBySubscript, uniqueConcatList)
 import LogicUS.FOL.SyntaxSemantics as FOL_SS exposing (FormulaFOL(..), SetFOL, Substitution, Term(..), Variable)
 
 
@@ -190,10 +190,10 @@ ffolType f =
             T
 
 
-{-| It gives the components of a uncuantified formula for using them in the expansion of a semantic board
+{-| It gives the components of a unquantified formula for using them in the expansion of a semantic board
 -}
-ffolUncuantifiedComponents : FormulaFOL -> SetFOL
-ffolUncuantifiedComponents f =
+ffolUnquantifiedComponents : FormulaFOL -> SetFOL
+ffolUnquantifiedComponents f =
     case f of
         Neg (Neg g) ->
             [ g ]
@@ -250,10 +250,10 @@ ffolUncuantifiedComponents f =
             []
 
 
-{-| It gives the components of a cuantified formula for using them in the expansion of a semantic board
+{-| It gives the components of a quantified formula for using them in the expansion of a semantic board
 -}
-ffolCuantifiedComponents : FormulaFOL -> Maybe ( Variable, FormulaFOL )
-ffolCuantifiedComponents f =
+ffolQuantifiedComponents : FormulaFOL -> Maybe ( Variable, FormulaFOL )
+ffolQuantifiedComponents f =
     case f of
         Exists v g ->
             Just ( v, g )
@@ -379,7 +379,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
                     Just ( i, ( _, ti ) ) ->
                         let
                             g =
-                                Maybe.withDefault Insat <| List.head <| ffolUncuantifiedComponents ti.f
+                                Maybe.withDefault Insat <| List.head <| ffolUnquantifiedComponents ti.f
                         in
                         let
                             new_nodes =
@@ -396,7 +396,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
                             Just ( i, ( _, ti ) ) ->
                                 let
                                     ( g, h ) =
-                                        case ffolUncuantifiedComponents ti.f of
+                                        case ffolUnquantifiedComponents ti.f of
                                             [ g1, h1 ] ->
                                                 ( g1, h1 )
 
@@ -420,7 +420,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
                                     Just ( i, ( _, ti ) ) ->
                                         let
                                             ( g, h ) =
-                                                case ffolUncuantifiedComponents ti.f of
+                                                case ffolUnquantifiedComponents ti.f of
                                                     [ g1, h1 ] ->
                                                         ( g1, h1 )
 
@@ -465,7 +465,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
                                                         generateNewConst 1 m
 
                                                     ( v, g ) =
-                                                        Maybe.withDefault ( ( "", [], 0 ), Insat ) <| ffolCuantifiedComponents ti.f
+                                                        Maybe.withDefault ( ( "", [], 0 ), Insat ) <| ffolQuantifiedComponents ti.f
                                                 in
                                                 let
                                                     new_nodes =
@@ -489,7 +489,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
                                                                 Maybe.withDefault (generateNewConst 1 m) <| LE.maximumBy (\x -> Maybe.withDefault 0 <| List.head <| List.map Tuple.second <| List.filter (\( y, _ ) -> y == x) occurs) <| List.filter (\x -> not (List.member x ti.ut)) m
 
                                                             ( v, g ) =
-                                                                Maybe.withDefault ( ( "", [], 0 ), Insat ) <| ffolCuantifiedComponents ti.f
+                                                                Maybe.withDefault ( ( "", [], 0 ), Insat ) <| ffolQuantifiedComponents ti.f
                                                         in
                                                         let
                                                             new_m =
@@ -617,11 +617,8 @@ semanticTableauToDOT t =
 
                     T ->
                         "T"
-
-        myStyles =
-            { defaultStyles | node = "shape=box, color=white, fontcolor=black", edge = "dir=none, color=blue, fontcolor=blue" }
     in
-    String.replace "\n" "" <| String.replace "\"" ">" <| String.replace "=\"" "=<" <| Graph.DOT.outputWithStyles myStyles toStringNode (Maybe.map toStringEdge) <| t
+    String.replace "\n" "" <| Graph.DOT.output toStringNode (Maybe.map toStringEdge) <| t
 
 
 

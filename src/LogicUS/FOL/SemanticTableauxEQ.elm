@@ -33,7 +33,7 @@ import Dict exposing (Dict)
 import Graph.Tree as GTree exposing (Tree)
 import Json.Encode as JSONE exposing (Value)
 import List.Extra as LE
-import LogicUS.AUX.AuxiliarFuctions exposing (listRemoveAll)
+import LogicUS.FOL.AuxiliarFuctions exposing (listRemoveAll)
 import LogicUS.FOL.Clauses exposing (ClauseFOLAtom(..))
 import LogicUS.FOL.SyntaxSemantics as FOL_SS exposing (FormulaFOL(..), Ident, SetFOL, Term(..), Variable, termClosedTerms, termToString, termsClosedTerms)
 import Maybe.Extra as ME
@@ -315,7 +315,7 @@ semanticTableauEq fs maxConstants maxSize =
     in
     let
         nodes =
-            Dict.fromList <| List.indexedMap generateNodeAuxFromF <| List.map (reduceDN << FOL_SS.ffolUniversalClausure) fs
+            Dict.fromList <| List.indexedMap generateNodeAuxFromF <| List.map (reduceDN << FOL_SS.ffolUniversalClosure) fs
 
         universe =
             []
@@ -1421,7 +1421,7 @@ tableauToStringAux :
 tableauToStringAux indent t =
     case GTree.root t of
         Just ( l, ch ) ->
-            String.repeat indent "   " ++ tableauNodeToString l ++ (String.join "" <| List.map (tableauToStringAux (indent + 1)) ch)
+            String.repeat (1 + indent) "    " ++ tableauNodeToString l ++ (String.join "" <| List.map (tableauToStringAux (indent + 1)) ch)
 
         Nothing ->
             ""
@@ -1793,9 +1793,9 @@ semanticTableauToJSON t =
 
 {-| It gives a DOT representation for the tableau.
 -}
-semanticTableauToDOT : FOLSemanticTableau -> String
-semanticTableauToDOT t =
-    "digraph{" ++ (Tuple.first <| semanticTableauNodeToDOTAux 0 -1 t) ++ "}"
+semanticTableauToDOT : FOLSemanticTableau -> String -> String
+semanticTableauToDOT t style =
+    "digraph{\n" ++ style ++ "\n" ++ (Tuple.first <| semanticTableauNodeToDOTAux 0 -1 t) ++ "\n}"
 
 
 semanticTableauNodeToDOTAux : Int -> Int -> FOLSemanticTableau -> ( String, Int )
@@ -1818,22 +1818,34 @@ semanticTableauNodeToDOTAux2 gid p ni children =
             in
             case ni.r of
                 LL ->
-                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ((String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp) ++ "(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")") ++ "\"];") ++ res, lgid )
+                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ((String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp) ++ "(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")") ++ "\"];") ++ "\n" ++ res, lgid )
 
                 AR ->
-                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛼(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ res, lgid )
+                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛼(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ "\n" ++ res, lgid )
 
                 BR ->
-                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛽(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ res, lgid )
+                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛽(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ "\n" ++ res, lgid )
 
                 GR ->
-                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛾(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")" ++ (Maybe.withDefault "" <| Maybe.map (\( x, y ) -> FOL_SS.substitutionToString <| Dict.singleton x y) ni.subs) ++ "." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ res, lgid )
+                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛾(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")" ++ (Maybe.withDefault "" <| Maybe.map (\( x, y ) -> FOL_SS.substitutionToString <| Dict.singleton x y) ni.subs) ++ "." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ "\n" ++ res, lgid )
 
                 DR ->
-                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛿(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")" ++ (Maybe.withDefault "" <| Maybe.map (\( x, y ) -> FOL_SS.substitutionToString <| Dict.singleton x y) ni.subs) ++ "." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ res, lgid )
+                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛿(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")" ++ (Maybe.withDefault "" <| Maybe.map (\( x, y ) -> FOL_SS.substitutionToString <| Dict.singleton x y) ni.subs) ++ "." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ "\n" ++ res, lgid )
 
                 IF ->
-                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid) ++ res, lgid )
+                    ( String.fromInt gid
+                        ++ " [label=\""
+                        ++ FOL_SS.ffolToString ni.f
+                        ++ "\"];\n"
+                        ++ (if p >= 0 then
+                                String.fromInt p ++ " -> " ++ String.fromInt gid ++ "\n"
+
+                            else
+                                ""
+                           )
+                        ++ res
+                    , lgid
+                    )
 
                 _ ->
                     ( "", -2 )
@@ -1849,22 +1861,22 @@ semanticTableauNodeToDOTAux2 gid p ni children =
             in
             case ni.r of
                 LL ->
-                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ((String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp) ++ "(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")") ++ "\"];") ++ res1 ++ "\n" ++ res2, lgid2 )
+                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ((String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp) ++ "(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")") ++ "\"];") ++ "\n" ++ res1 ++ "\n" ++ res2, lgid2 )
 
                 AR ->
-                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛼(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ res1 ++ "\n" ++ res2, lgid2 )
+                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛼(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ "\n" ++ res1 ++ "\n" ++ res2, lgid2 )
 
                 BR ->
-                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛽(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ res1 ++ "\n" ++ res2, lgid2 )
+                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛽(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ "\n" ++ res1 ++ "\n" ++ res2, lgid2 )
 
                 GR ->
-                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛾(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")" ++ (Maybe.withDefault "" <| Maybe.map (\( x, y ) -> FOL_SS.substitutionToString <| Dict.singleton x y) ni.subs) ++ "." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ res1 ++ "\n" ++ res2, lgid2 )
+                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛾(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")" ++ (Maybe.withDefault "" <| Maybe.map (\( x, y ) -> FOL_SS.substitutionToString <| Dict.singleton x y) ni.subs) ++ "." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ "\n" ++ res1 ++ "\n" ++ res2, lgid2 )
 
                 DR ->
-                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛿(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")" ++ (Maybe.withDefault "" <| Maybe.map (\( x, y ) -> FOL_SS.substitutionToString <| Dict.singleton x y) ni.subs) ++ "." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ res1 ++ "\n" ++ res2, lgid2 )
+                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid ++ " [label=\"" ++ ("𝛿(" ++ (Maybe.withDefault "" <| Maybe.map (String.fromInt << Tuple.first) ni.p1) ++ ")" ++ (Maybe.withDefault "" <| Maybe.map (\( x, y ) -> FOL_SS.substitutionToString <| Dict.singleton x y) ni.subs) ++ "." ++ (String.join "⚬" <| List.map (\id -> "𝓛𝓛" ++ String.fromInt id) <| ni.simp)) ++ "\"];") ++ "\n" ++ res1 ++ "\n" ++ res2, lgid2 )
 
                 IF ->
-                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid) ++ res1 ++ "\n" ++ res2, lgid2 )
+                    ( String.fromInt gid ++ " [label=\"" ++ FOL_SS.ffolToString ni.f ++ "\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid) ++ "\n" ++ res1 ++ "\n" ++ res2, lgid2 )
 
                 _ ->
                     ( "", -2 )

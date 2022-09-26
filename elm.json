@@ -3,7 +3,7 @@
     "name": "logicUSLIB/logicus-fol",
     "summary": "Elm package for working with First Order Logic.",
     "license": "BSD-3-Clause",
-    "version": "1.1.0",
+    "version": "2.0.0",
     "exposed-modules": [
         "LogicUS.FOL.SyntaxSemantics",
         "LogicUS.FOL.SemanticTableaux",

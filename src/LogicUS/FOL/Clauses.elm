@@ -1,7 +1,7 @@
 module LogicUS.FOL.Clauses exposing
     ( ClauseFOLAtom(..), ClauseFOLLiteral, ClauseFOL, ClauseFOLSet
     , cfolAtomVarSymbols, cfolVarSymbols, cfolAtomSymbol, cfolLiteralSymbols, cfolAtomApplySubstitution, cfolApplySubstitution, cfolSort, cfolUnion, cfolSubsumes, cfolIsTautology, cfolIsPositive, cfolIsNegative, csfolRemoveEqClauses, csfolRemoveTautClauses, csfolRemoveSubsumedClauses
-    , clauseFOLAtomToAtom, clauseFOLLitToLiteral, cfolFromCNF, ffolToClauses, sfolToClauses
+    , clauseFOLAtomToAtom, clauseFOLLitToLiteral, csfolFromCNF, ffolToClauses, sfolToClauses
     , cfolReadFromString, cfolReadExtraction, cfolToInputString
     , cfolToString, cfolToMathString, csfolToString, csfolToMathString
     )
@@ -21,7 +21,7 @@ module LogicUS.FOL.Clauses exposing
 
 # Formulas and Clauses
 
-@docs clauseFOLAtomToAtom, clauseFOLLitToLiteral, cfolFromCNF, ffolToClauses, sfolToClauses
+@docs clauseFOLAtomToAtom, clauseFOLLitToLiteral, csfolFromCNF, ffolToClauses, sfolToClauses
 
 
 # Clauses Parser
@@ -39,7 +39,7 @@ module LogicUS.FOL.Clauses exposing
 -- IMPORTS --
 --=========--
 
-import LogicUS.AUX.AuxiliarFuctions exposing (cleanSpaces, uniqueConcatList)
+import LogicUS.FOL.AuxiliarFuctions exposing (cleanSpaces, uniqueConcatList)
 import LogicUS.FOL.NormalForms as FOL_NF
 import LogicUS.FOL.SyntaxSemantics as FOL_SS exposing (FormulaFOL(..), SetFOL, Substitution, Term(..), Variable)
 import Parser exposing ((|.), (|=), Parser, Trailing(..))
@@ -301,10 +301,10 @@ clauseFOLLitToLiteral ( a, sign ) =
 
 {-| It pass a CNF formula (opened) to a Set of clausses
 -}
-cfolFromCNF : FormulaFOL -> Maybe ClauseFOLSet
-cfolFromCNF f =
+csfolFromCNF : FormulaFOL -> Maybe ClauseFOLSet
+csfolFromCNF f =
     let
-        cfolFromCNFAux g =
+        csfolFromCNFAux g =
             case g of
                 Pred p ts ->
                     Just [ [ ( P p ts, True ) ] ]
@@ -322,8 +322,8 @@ cfolFromCNF f =
                     Maybe.map (\c -> [ c ]) <|
                         Maybe.map cfolSort <|
                             Maybe.map2 uniqueConcatList
-                                (Maybe.map List.concat <| cfolFromCNFAux g1)
-                                (Maybe.map List.concat <| cfolFromCNFAux g2)
+                                (Maybe.map List.concat <| csfolFromCNFAux g1)
+                                (Maybe.map List.concat <| csfolFromCNFAux g2)
 
                 Insat ->
                     Just [ [] ]
@@ -336,7 +336,7 @@ cfolFromCNF f =
     in
     case f of
         Conj f1 f2 ->
-            Maybe.map2 uniqueConcatList (cfolFromCNF f1) (cfolFromCNF f2)
+            Maybe.map2 uniqueConcatList (csfolFromCNF f1) (csfolFromCNF f2)
 
         Pred p ts ->
             Just [ [ ( P p ts, True ) ] ]
@@ -354,8 +354,8 @@ cfolFromCNF f =
             Maybe.map (\c -> [ c ]) <|
                 Maybe.map cfolSort <|
                     Maybe.map2 uniqueConcatList
-                        (Maybe.map List.concat <| cfolFromCNFAux f1)
-                        (Maybe.map List.concat <| cfolFromCNFAux f2)
+                        (Maybe.map List.concat <| csfolFromCNFAux f1)
+                        (Maybe.map List.concat <| csfolFromCNFAux f2)
 
         Insat ->
             Just [ [] ]
@@ -371,14 +371,14 @@ cfolFromCNF f =
 -}
 ffolToClauses : FormulaFOL -> ClauseFOLSet
 ffolToClauses f =
-    Maybe.withDefault [ [] ] <| cfolFromCNF <| FOL_NF.ffolToCNF f
+    Maybe.withDefault [ [] ] <| csfolFromCNF <| FOL_NF.ffolToCNF f
 
 
 {-| Express a set of formulas as a Set of clauses.
 -}
 sfolToClauses : SetFOL -> ClauseFOLSet
 sfolToClauses fs =
-    List.foldl (\f ac -> uniqueConcatList ac <| Maybe.withDefault [ [] ] <| cfolFromCNF f) [] <| FOL_NF.sfolToCNF fs
+    List.foldl (\f ac -> uniqueConcatList ac <| Maybe.withDefault [ [] ] <| csfolFromCNF f) [] <| FOL_NF.sfolToCNF fs
 
 
 
@@ -450,14 +450,14 @@ folVariableParser =
         , Parser.succeed identity
             |= Parser.backtrackable folVarSupindexedParser
         , Parser.succeed (\x -> ( x, [], 0 ))
-            |= folTermNameParser
+            |= folVarNameParser
         ]
 
 
 folVarSubindexedParser : Parser Variable
 folVarSubindexedParser =
     Parser.succeed (\x y -> ( x, y, 0 ))
-        |= folTermNameParser
+        |= folVarNameParser
         |= Parser.sequence
             { start = "_{"
             , separator = ","
@@ -471,7 +471,7 @@ folVarSubindexedParser =
 folVarSupindexedParser : Parser Variable
 folVarSupindexedParser =
     Parser.succeed (\x y -> ( x, [], y ))
-        |= folTermNameParser
+        |= folVarNameParser
         |. Parser.symbol "^{"
         |= Parser.int
         |. Parser.symbol "}"
@@ -480,7 +480,7 @@ folVarSupindexedParser =
 folVarSubSuperIndexedParser : Parser Variable
 folVarSubSuperIndexedParser =
     Parser.succeed (\x y z -> ( x, y, z ))
-        |= folTermNameParser
+        |= folVarNameParser
         |= Parser.sequence
             { start = "_{"
             , separator = ","
@@ -494,28 +494,36 @@ folVarSubSuperIndexedParser =
         |. Parser.symbol "}"
 
 
-folTermNameParser : Parser String
-folTermNameParser =
+folFuncNameParser : Parser String
+folFuncNameParser =
     Parser.succeed ()
         |. Parser.chompIf Char.isLower
         |. Parser.chompWhile Char.isAlpha
         |> Parser.getChompedString
 
 
-folTermIdentifierParser : Parser ( String, List Int )
-folTermIdentifierParser =
+folVarNameParser : Parser String
+folVarNameParser =
+    Parser.succeed ()
+        |. Parser.chompIf Char.isUpper
+        |. Parser.chompWhile Char.isAlpha
+        |> Parser.getChompedString
+
+
+folFuncIdentifierParser : Parser ( String, List Int )
+folFuncIdentifierParser =
     Parser.oneOf
         [ Parser.succeed identity
-            |= Parser.backtrackable folTermIdentifierSubindexedParser
+            |= Parser.backtrackable folFuncIdentifierSubindexedParser
         , Parser.succeed (\x -> ( x, [] ))
-            |= folTermNameParser
+            |= folFuncNameParser
         ]
 
 
-folTermIdentifierSubindexedParser : Parser ( String, List Int )
-folTermIdentifierSubindexedParser =
+folFuncIdentifierSubindexedParser : Parser ( String, List Int )
+folFuncIdentifierSubindexedParser =
     Parser.succeed Tuple.pair
-        |= folTermNameParser
+        |= folFuncNameParser
         |= Parser.sequence
             { start = "_{"
             , separator = ","
@@ -562,8 +570,7 @@ folTermParser : Parser Term
 folTermParser =
     Parser.oneOf
         [ Parser.succeed Func
-            |. Parser.symbol "_"
-            |= folTermIdentifierParser
+            |= folFuncIdentifierParser
             |= folListTermParser
         , Parser.succeed Var
             |= folVariableParser

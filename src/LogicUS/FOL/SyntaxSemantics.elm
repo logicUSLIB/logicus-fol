@@ -1357,11 +1357,11 @@ cleanSpaces x =
 
 {-| It reads the formula from a string. It returns a tuple with may be a formula (if it can be read it), the input considerated to parse and a message of error it it is not able to performs the parsing. The rules of the notation are:
 
-  - The variables correspond to strings of characters, the first in lowercase, and optionally indexed by natural numbers, which have been written between the symbols `_{` and `}` and separated by commas. For example: `x`,`y_{1}`, `xA_{1,1}`.
-  - The functions are described analogously to the variables but preceding the symbol `*`. In addition, the arguments, if any, are specified between parentheses and separated by commas. Examples of constants `*a`,`*b_{1}`,`*john`, and functions (not constants): `*f(x)`, `*g_{1}(x, *a)`,`*father(*john)`, ...
-  - Predicates are described in a similar way to functions, as strings of characters, the first in uppercase, and followed, if applicable, by a list of terms, specified in parentheses and separated by commas, in the same way as presented for functions. Examples of predicates `P`,`Q_{1}(x)`,`Uncle(*john, *paul)`, ...
+  - The variables correspond to strings of characters, the first in Uppercase, and optionally indexed by natural numbers, which have been written between the symbols `_{` and `}` and separated by commas. For example: `X`,`Y_{1}`, `Xa_{1,1}`.
+  - The functions are described analogously to the variables but with the first letter in lowerCase. In addition, the arguments, if any, are specified between parentheses and separated by commas. Examples of constants `a`,`b_{1}`,`john`, and functions (not constants): `f(X)`, `*g_{1}(X, a)`,`*father(john)`, ...
+  - Predicates are described in a similar way to functions, as strings of characters, the first in uppercase, and followed, if applicable, by a list of terms, specified in parentheses and separated by commas, in the same way as presented for functions. Examples of predicates `P`,`Q_{1}(X)`,`Uncle(john, paul)`, ...
   - The use of connectives is equivalent proposed for propositional logic, using `&` for conjunction, `|` for disjunction, `->` for implication, `<->` for equivalence and `¬` or `-` for negation with classical priority(negation, conjunction, disjunction, implication, equivalence) and the use of parentheses to indicate another association priority.
-  - Quantifiers are described as `!E` for the existential`!A` for the universal, followed by the variable indicated in brackets, `[` and `]`, and by the quantized formula. As an example, the inductive property on a function (f) can be expressed as: `!A[x_{1}] !A[x_{2}](*f(x_{1}) = *f(x_{2}) -> *x_{1} = *f(x_{2}))`, or the membership of a value (a) to the range of a function (g) like `!E[x](*g(x) = *a))`.
+  - Quantifiers are described as `!E` for the existential`!A` for the universal, followed by the variable indicated in brackets, `[` and `]`, and by the quantized formula. As an example, the inductive property on a function (f) can be expressed as: `!A[X_{1}] !A[X_{2}](f(X_{1}) = f(X_{2}) -> X_{1} = f(X_{2}))`, or the membership of a value (a) to the range of a function (g) like `!E[X](g(X) = a))`.
   - As in propositional logic, the valid formula is defined by `!T` and the unsatisfiable formula for`!F`.
   - The external parentheses of the formulas should not be put, since the Parser will put them automatically, so their use or not is irrelevant.
     Error messages are not perfect but we're working to improve it.
@@ -1512,7 +1512,7 @@ folVarNameParser : Parser String
 folVarNameParser =
     Parser.succeed ()
         |. Parser.chompIf Char.isUpper
-        |. Parser.chompWhile Char.isAlpha
+        |. Parser.chompWhile Char.isAlphaNum
         |> Parser.getChompedString
 
 

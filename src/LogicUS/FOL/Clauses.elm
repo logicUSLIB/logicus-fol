@@ -41,8 +41,8 @@ module LogicUS.FOL.Clauses exposing
 
 import LogicUS.FOL.AuxiliarFuctions exposing (cleanSpaces, uniqueConcatList)
 import LogicUS.FOL.NormalForms as FOL_NF
-import LogicUS.FOL.SyntaxSemantics as FOL_SS exposing (FormulaFOL(..), SetFOL, Substitution, Term(..), Variable)
-import Parser exposing ((|.), (|=), Parser, Trailing(..))
+import LogicUS.FOL.SyntaxSemantics as FOL_SS exposing (FormulaFOL(..), Ident, SetFOL, Substitution, Term(..), Variable)
+import Parser exposing ((|.), (|=), Parser, Trailing(..), succeed)
 import Set exposing (Set)
 
 
@@ -454,6 +454,14 @@ folVariableParser =
         ]
 
 
+folVarNameParser : Parser String
+folVarNameParser =
+    Parser.succeed ()
+        |. Parser.chompIf Char.isUpper
+        |. Parser.chompWhile Char.isAlphaNum
+        |> Parser.getChompedString
+
+
 folVarSubindexedParser : Parser Variable
 folVarSubindexedParser =
     Parser.succeed (\x y -> ( x, y, 0 ))
@@ -494,36 +502,30 @@ folVarSubSuperIndexedParser =
         |. Parser.symbol "}"
 
 
-folFuncNameParser : Parser String
-folFuncNameParser =
+folTermNameParser : Parser String
+folTermNameParser =
     Parser.succeed ()
         |. Parser.chompIf Char.isLower
         |. Parser.chompWhile Char.isAlpha
         |> Parser.getChompedString
 
 
-folVarNameParser : Parser String
-folVarNameParser =
-    Parser.succeed ()
-        |. Parser.chompIf Char.isUpper
-        |. Parser.chompWhile Char.isAlpha
-        |> Parser.getChompedString
-
-
-folFuncIdentifierParser : Parser ( String, List Int )
-folFuncIdentifierParser =
+folTermIdentifierParser : Parser Ident
+folTermIdentifierParser =
     Parser.oneOf
         [ Parser.succeed identity
-            |= Parser.backtrackable folFuncIdentifierSubindexedParser
+            |= Parser.backtrackable folTermIdentifierSubindexedParser
         , Parser.succeed (\x -> ( x, [] ))
-            |= folFuncNameParser
+            |= folTermNameParser
+        , Parser.succeed (\x -> ( x, [] ))
+            |= Parser.map String.fromInt Parser.int
         ]
 
 
-folFuncIdentifierSubindexedParser : Parser ( String, List Int )
-folFuncIdentifierSubindexedParser =
+folTermIdentifierSubindexedParser : Parser Ident
+folTermIdentifierSubindexedParser =
     Parser.succeed Tuple.pair
-        |= folFuncNameParser
+        |= folTermNameParser
         |= Parser.sequence
             { start = "_{"
             , separator = ","
@@ -538,11 +540,11 @@ folPredNameParser : Parser String
 folPredNameParser =
     Parser.succeed ()
         |. Parser.chompIf Char.isUpper
-        |. Parser.chompWhile Char.isAlpha
+        |. Parser.chompWhile Char.isAlphaNum
         |> Parser.getChompedString
 
 
-folPredIdentifierParser : Parser ( String, List Int )
+folPredIdentifierParser : Parser Ident
 folPredIdentifierParser =
     Parser.oneOf
         [ Parser.succeed identity
@@ -552,7 +554,7 @@ folPredIdentifierParser =
         ]
 
 
-folPredIdentifierSubindexedParser : Parser ( String, List Int )
+folPredIdentifierSubindexedParser : Parser Ident
 folPredIdentifierSubindexedParser =
     Parser.succeed Tuple.pair
         |= folPredNameParser
@@ -569,10 +571,10 @@ folPredIdentifierSubindexedParser =
 folTermParser : Parser Term
 folTermParser =
     Parser.oneOf
-        [ Parser.succeed Func
-            |= folFuncIdentifierParser
+        [ succeed Func
+            |= folTermIdentifierParser
             |= folListTermParser
-        , Parser.succeed Var
+        , succeed Var
             |= folVariableParser
         ]
 
@@ -580,11 +582,11 @@ folTermParser =
 folListTermParser : Parser (List Term)
 folListTermParser =
     Parser.oneOf
-        [ Parser.succeed identity
+        [ succeed identity
             |. Parser.symbol "("
             |= Parser.lazy (\_ -> folEnumerationTermParser)
             |. Parser.symbol ")"
-        , Parser.succeed []
+        , succeed []
         ]
 
 

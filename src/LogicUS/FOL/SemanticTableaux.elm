@@ -2,7 +2,7 @@ module LogicUS.FOL.SemanticTableaux exposing
     ( FormulaFOLType, FOLSemanticTableau, TableauNodeItem, TableauEdgeItem
     , ffolType, ffolUnquantifiedComponents, ffolQuantifiedComponents
     , semanticTableau, semanticTableauIsInsat, semanticTableauRUNII
-    , semanticTableauToString, semanticTableauToDOT
+    , semanticTableauToString, semanticTableauToDOT, semanticTableauToDOTStyled
     )
 
 {-| The module provides the elementary tools for building the semantic tableau of a set of FOL formulas.
@@ -25,16 +25,17 @@ module LogicUS.FOL.SemanticTableaux exposing
 
 # Fuctions for representation
 
-@docs semanticTableauToString, semanticTableauToDOT
+@docs semanticTableauToString, semanticTableauToDOT, semanticTableauToDOTStyled
 
 -}
 
 import Dict exposing (Dict)
 import Graph exposing (Edge, Graph, Node, nodes)
-import Graph.DOT exposing (defaultStyles)
+import Graph.DOT
 import List.Extra as LE
 import LogicUS.FOL.AuxiliarFuctions exposing (replaceBySubscript, uniqueConcatList)
 import LogicUS.FOL.SyntaxSemantics as FOL_SS exposing (FormulaFOL(..), SetFOL, Substitution, Term(..), Variable)
+import Graph.DOT exposing (Styles)
 
 
 {-| It defines the type of a PL formula which can be a _Literal_, _Double Negation_, _Alpha_, _Beta_, _Gamma_ (forall), _Delta_(exists) _Insat_ or _Taut_
@@ -327,7 +328,7 @@ semanticTableau fs uMax dMax =
     in
     let
         ( res_nodes, res_edges ) =
-            semanticTableauAux m dMax uMax (List.length fs) (List.length fs) (List.length fs - 1) 0 nodes edges
+            semanticTableauAux m dMax uMax (List.length fs) (List.length fs) (List.length fs - 1) 0 nodes edges False
     in
     Graph.fromNodesAndEdges
         (List.map (\( k, v ) -> Node k v) <| Dict.toList <| res_nodes)
@@ -348,8 +349,9 @@ semanticTableauAux :
     -> Int
     -> Dict Int ( Int, TableauNodeItem )
     -> Dict ( Int, Int ) (Maybe TableauEdgeItem)
+    -> Bool
     -> ( Dict Int ( Int, TableauNodeItem ), Dict ( Int, Int ) (Maybe TableauEdgeItem) )
-semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
+semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges undec=
     -- 1. Search contradiction
     case searchContradiction <| Dict.toList nodes of
         -- 1.1. If it is encountered, then STOP --> CLOSED BRANCH
@@ -370,7 +372,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
                     g =
                         Maybe.withDefault Insat <| Maybe.map (\x -> (Tuple.second x).f) <| Dict.get nidp nodes
                 in
-                ( Dict.insert nid ( 1, { f = g, t = I, u = uMax, ut = [], i = nid2, ps = [], ant = nidp } ) nodes
+                ( Dict.insert nid ( 2, { f = g, t = I, u = uMax, ut = [], i = nid2, ps = [], ant = nidp } ) nodes
                 , Dict.insert ( nidp, nid ) Nothing edges
                 )
 
@@ -389,7 +391,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
                             new_edges =
                                 Dict.insert ( nidp, nid ) (Just { r = DN, is = [ ti.i ], br = 1, s = Dict.empty }) edges
                         in
-                        semanticTableauAux m dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes new_edges
+                        semanticTableauAux m dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes new_edges undec
 
                     Nothing ->
                         case List.head <| List.filter (\( _, ( _, ti ) ) -> ti.t == A && ti.u /= 0) <| Dict.toList nodes of
@@ -413,7 +415,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
                                         Dict.insert ( nid, nid + 1 ) (Just { r = A, is = [ ti.i ], br = 2, s = Dict.empty }) <|
                                             Dict.insert ( nidp, nid ) (Just { r = A, is = [ ti.i ], br = 1, s = Dict.empty }) edges
                                 in
-                                semanticTableauAux m dMax uMax (nid + 2) (nid2 + 2) (nid + 1) (dcur + 1) new_nodes new_edges
+                                semanticTableauAux m dMax uMax (nid + 2) (nid2 + 2) (nid + 1) (dcur + 1) new_nodes new_edges undec
 
                             Nothing ->
                                 case List.head <| List.filter (\( _, ( _, ti ) ) -> ti.t == B && ti.u /= 0) <| Dict.toList nodes of
@@ -437,7 +439,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
                                         in
                                         let
                                             ( nodes1, edges1 ) =
-                                                semanticTableauAux m dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes1 new_edges1
+                                                semanticTableauAux m dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes1 new_edges1 undec
                                         in
                                         let
                                             new_nid =
@@ -453,7 +455,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
                                         in
                                         let
                                             ( nodes2, edges2 ) =
-                                                semanticTableauAux m dMax uMax (new_nid + 1) (nid2 + 1) new_nid (dcur + 1) new_nodes2 new_edges2
+                                                semanticTableauAux m dMax uMax (new_nid + 1) (nid2 + 1) new_nid (dcur + 1) new_nodes2 new_edges2 undec
                                         in
                                         ( Dict.union nodes1 nodes2, Dict.union edges1 edges2 )
 
@@ -475,7 +477,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
                                                     new_edges =
                                                         Dict.insert ( nidp, nid ) (Just { r = D, is = [ i ], br = 1, s = Dict.singleton v c }) edges
                                                 in
-                                                semanticTableauAux (m ++ [ c ]) dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes new_edges
+                                                semanticTableauAux (m ++ [ c ]) dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes new_edges undec
 
                                             Nothing ->
                                                 case List.head <| List.sortBy (\( _, ( _, ti ) ) -> uMax - ti.u) <| List.filter (\( _, ( _, ti ) ) -> ti.t == G && ti.u /= 0) <| Dict.toList nodes of
@@ -502,23 +504,28 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges =
                                                             new_edges =
                                                                 Dict.insert ( nidp, nid ) (Just { r = G, is = [ ti.i ], br = 1, s = Dict.singleton v tsus }) edges
                                                         in
-                                                        semanticTableauAux new_m dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes new_edges
+                                                        semanticTableauAux new_m dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes new_edges True
 
                                                     Nothing ->
                                                         let
                                                             g =
                                                                 Maybe.withDefault Insat <| Maybe.map (\x -> (Tuple.second x).f) <| Dict.get nidp nodes
                                                         in
-                                                        ( Dict.insert nid ( 1, { f = g, t = I, u = uMax, ut = [], i = nid2, ps = [], ant = nidp } ) nodes
-                                                        , Dict.insert ( nidp, nid ) Nothing edges
-                                                        )
+                                                        if undec then 
+                                                            ( Dict.insert nid ( 2, { f = g, t = I, u = uMax, ut = [], i = nid2, ps = [], ant = nidp } ) nodes
+                                                            , Dict.insert ( nidp, nid ) Nothing edges
+                                                            )
+                                                        else
+                                                            ( Dict.insert nid ( 1, { f = g, t = I, u = uMax, ut = [], i = nid2, ps = [], ant = nidp } ) nodes
+                                                            , Dict.insert ( nidp, nid ) Nothing edges
+                                                            )
 
 
 {-| It check if a tableau has all his branches closed
 -}
 semanticTableauIsInsat : FOLSemanticTableau -> Bool
 semanticTableauIsInsat t =
-    not <| List.any (\x -> Tuple.first x.label == 1) <| Graph.nodes t
+    not <| List.any (\x -> Tuple.first x.label == 1 || Tuple.first x.label == 1) <| Graph.nodes t
 
 
 {-| It allows to represent a FOL Semantic Tableau as a string
@@ -534,6 +541,9 @@ semanticTableauToString t =
 
                     else if i == 1 then
                         "◯"
+
+                    else if i == 2 then
+                        "ⓤ"
 
                     else
                         "F" ++ (replaceBySubscript <| String.fromInt (ti.i + 1)) ++ "≡" ++ FOL_SS.ffolToString ti.f
@@ -584,6 +594,9 @@ semanticTableauToDOT t =
 
                     else if i == 1 then
                         "⭘"
+                    
+                    else if i == 2 then
+                        "ⓤ"
 
                     else
                         "F" ++ (replaceBySubscript <| String.fromInt (ti.i + 1)) ++ "≡" ++ FOL_SS.ffolToString ti.f
@@ -621,6 +634,58 @@ semanticTableauToDOT t =
     String.replace "\n" "" <| Graph.DOT.output toStringNode (Maybe.map toStringEdge) <| t
 
 
+{-| It allows to represent a FOL Semantic Tableau as a DOT String rederable by GraphViz, with applying custom styles.
+-}
+semanticTableauToDOTStyled : FOLSemanticTableau -> Styles -> String
+semanticTableauToDOTStyled t myStyles =
+    let
+        toStringNode =
+            \( i, ti ) ->
+                Just <|
+                    if i == -1 then
+                        "🗴"
+
+                    else if i == 1 then
+                        "⭘"
+                    
+                    else if i == 2 then
+                        "ⓤ"
+
+                    else
+                        "F" ++ (replaceBySubscript <| String.fromInt (ti.i + 1)) ++ "≡" ++ FOL_SS.ffolToString ti.f
+
+        toStringEdge =
+            \ei ->
+                case ei.r of
+                    L ->
+                        "L"
+
+                    E ->
+                        "E"
+
+                    DN ->
+                        "dN(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")"
+
+                    A ->
+                        "α" ++ (replaceBySubscript <| String.fromInt ei.br) ++ "(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")"
+
+                    B ->
+                        "β" ++ (replaceBySubscript <| String.fromInt ei.br) ++ "(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")"
+
+                    G ->
+                        "γ(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ "," ++ FOL_SS.substitutionToString ei.s ++ ")"
+
+                    D ->
+                        "δ(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")⇒" ++ FOL_SS.substitutionToString ei.s
+
+                    I ->
+                        "⟂(" ++ (String.join "," <| List.map (\ind -> "F" ++ (replaceBySubscript <| String.fromInt (ind + 1))) ei.is) ++ ")"
+
+                    T ->
+                        "T"
+    in
+    String.replace "\n" "" <| Graph.DOT.outputWithStyles myStyles toStringNode (Maybe.map toStringEdge) <| t
+
 
 -- -- AuxiliarMethods for removing nodes that are irrelevant in the search process
 
@@ -635,7 +700,7 @@ recoverClosedPathNodes i dictNodes =
             []
 
 
-{-| It Removes the Useless Nodes In Insatisfiable tableau, that are the nodes that don't participates in the way to lograte the insatifiability.
+{-| It Removes the Useless Nodes In Insatisfiable tableau, that are the nodes that don't participates in the way to lograte the unsatifiability.
 -}
 semanticTableauRUNII : FOLSemanticTableau -> FOLSemanticTableau
 semanticTableauRUNII t =

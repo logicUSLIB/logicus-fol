@@ -1,7 +1,7 @@
 module LogicUS.FOL.Resolution exposing
     ( Resolvent, cfol2SeparationSubst, cfol2Separation, cfol2ContraryLiterals
     , ResolutionTableau, csfolSCFResolution, csfolSCFLinearResolution, csplSCFPositiveResolution, csplSCFNegativeResolution
-    , resolutionTableauToString, resolutionTableauToDOT
+    , resolutionTableauToString, resolutionTableauToDOT, resolutionTableauToDOTStyled
     , cfol2AllResolvents
     )
 
@@ -20,19 +20,20 @@ module LogicUS.FOL.Resolution exposing
 
 # Resolution Tableau Representation
 
-@docs resolutionTableauToString, resolutionTableauToDOT
+@docs resolutionTableauToString, resolutionTableauToDOT, resolutionTableauToDOTStyled
 
 -}
 
 import Dict exposing (Dict)
 import Graph exposing (Edge, Graph, Node)
-import Graph.DOT as GDOT exposing (defaultStyles)
+import Graph.DOT as GDOT
 import List.Extra as LE
 import LogicUS.FOL.AuxiliarFuctions exposing (uniqueConcatList)
 import LogicUS.FOL.Clauses as FOL_CL exposing (ClauseFOL, ClauseFOLLiteral)
 import LogicUS.FOL.SyntaxSemantics as FOL_SS exposing (Substitution, Term(..))
 import LogicUS.FOL.Unification as FOL_UN
 import Set
+import Graph.DOT exposing (Styles)
 
 
 
@@ -756,3 +757,41 @@ resolutionTableauToDOT g =
                         (Graph.nodes g)
     in
     String.replace "\n" "" <| String.replace "\n}" ("\n\n  {rank=same; " ++ initialNodes ++ ";}\n}") <| GDOT.output toStringNode toStringEdge g
+
+{-| Express a Resolution Tableau as a string in DOT format that is viewable with a GraphViz Render, with adding custom styles.
+-}
+resolutionTableauToDOTStyled : ResolutionTableau -> Styles -> String
+resolutionTableauToDOTStyled g myStyles =
+    let
+        toStringNode =
+            \( _, cs ) -> Just <| FOL_CL.cfolToString cs
+
+        toStringEdge =
+            \( rn, mgu ) ->
+                if Dict.isEmpty rn && Dict.isEmpty mgu then
+                    Nothing
+
+                else if Dict.isEmpty rn then
+                    Just <| FOL_SS.substitutionToString mgu
+
+                else if Dict.isEmpty mgu then
+                    Just <| FOL_SS.substitutionToString rn
+
+                else
+                    Just <| FOL_SS.substitutionToString rn ++ "<BR/>" ++ FOL_SS.substitutionToString mgu
+
+        initialNodes =
+            String.join ";" <|
+                List.map String.fromInt <|
+                    List.foldl
+                        (\x ac ->
+                            if Tuple.first x.label then
+                                ac ++ [ x.id ]
+
+                            else
+                                ac
+                        )
+                        []
+                        (Graph.nodes g)
+    in
+    String.replace "\n" "" <| String.replace "\n}" ("\n\n  {rank=same; " ++ initialNodes ++ ";}\n}") <| GDOT.outputWithStyles myStyles toStringNode toStringEdge g

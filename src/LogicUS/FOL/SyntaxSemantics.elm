@@ -47,6 +47,8 @@ import LogicUS.FOL.AuxiliarFuctions exposing (replaceBySubscript, replaceBySuper
 import Maybe.Extra as ME
 import Parser exposing ((|.), (|=), Parser, Trailing(..), succeed)
 import Set exposing (Set)
+import Tuple exposing (first)
+import Tuple exposing (second)
 
 
 
@@ -105,7 +107,7 @@ type alias SetFOL =
 ----------------------
 
 
-{-| It gives the negarion of a formula applying idempotent rule or the insat/taut negation when corresponds.
+{-| It gives the negation of a formula applying idempotent rule or the insat/taut negation when corresponds.
 -}
 ffolNegation : FormulaFOL -> FormulaFOL
 ffolNegation f =
@@ -1357,11 +1359,11 @@ cleanSpaces x =
 
 {-| It reads the formula from a string. It returns a tuple with may be a formula (if it can be read it), the input considerated to parse and a message of error it it is not able to performs the parsing. The rules of the notation are:
 
-  - The variables correspond to strings of characters, the first in Uppercase, and optionally indexed by natural numbers, which have been written between the symbols `_{` and `}` and separated by commas. For example: `X`,`Y_{1}`, `Xa_{1,1}`.
-  - The functions are described analogously to the variables but with the first letter in lowerCase. In addition, the arguments, if any, are specified between parentheses and separated by commas. Examples of constants `a`,`b_{1}`,`john`, and functions (not constants): `f(X)`, `*g_{1}(X, a)`,`*father(john)`, ...
-  - Predicates are described in a similar way to functions, as strings of characters, the first in uppercase, and followed, if applicable, by a list of terms, specified in parentheses and separated by commas, in the same way as presented for functions. Examples of predicates `P`,`Q_{1}(X)`,`Uncle(john, paul)`, ...
+  - The variables correspond to alphanumeric strings, starting with an uppercase character, and optionally indexed by sequences of natural numbers, which have been written between the symbols `_{` and `}` and separated by commas. For example: `X`,`Y_{1}`, `   Xa_{1,1}`.
+  - The functions are described analogously to the variables but starting with a lowercase character. In addition, the arguments, if any, are specified between parentheses and separated by commas. Examples of constants `a`, `b_{1}`,`john`, and functions (not constants): `f(x)`, `g_{1}(X, a)`,`*father(john)`, ...
+  - Predicates are described in a similar way to functions, as strings of characters, the first in uppercase, and followed, if applicable, by a list of terms, specified in parentheses and separated by commas, in the same way as presented for functions. Examples of predicates `P`,`Q_{1}(X)`,`Uncle(*john, *paul)`, ...
   - The use of connectives is equivalent proposed for propositional logic, using `&` for conjunction, `|` for disjunction, `->` for implication, `<->` for equivalence and `¬` or `-` for negation with classical priority(negation, conjunction, disjunction, implication, equivalence) and the use of parentheses to indicate another association priority.
-  - Quantifiers are described as `!E` for the existential`!A` for the universal, followed by the variable indicated in brackets, `[` and `]`, and by the quantized formula. As an example, the inductive property on a function (f) can be expressed as: `!A[X_{1}] !A[X_{2}](f(X_{1}) = f(X_{2}) -> X_{1} = f(X_{2}))`, or the membership of a value (a) to the range of a function (g) like `!E[X](g(X) = a))`.
+  - Quantifiers are described as `!E` for the existential`!A` for the universal, followed by the variable indicated in brackets, `[` and `]`, and by the quantized formula. As an example, the inductive property on a function (f) can be expressed as: `!A[X_{1}] !A[X_{2}](f(X_{1}) = f(X_{2}) -> X_{1} = f(X_{2}))`, or the membership of a value (a) to the range of a function (g) like `!E[x](g(X) = a))`.
   - As in propositional logic, the valid formula is defined by `!T` and the unsatisfiable formula for`!F`.
   - The external parentheses of the formulas should not be put, since the Parser will put them automatically, so their use or not is irrelevant.
     Error messages are not perfect but we're working to improve it.
@@ -1512,7 +1514,7 @@ folVarNameParser : Parser String
 folVarNameParser =
     Parser.succeed ()
         |. Parser.chompIf Char.isUpper
-        |. Parser.chompWhile Char.isAlphaNum
+        |. Parser.chompWhile Char.isAlpha
         |> Parser.getChompedString
 
 
@@ -1902,6 +1904,7 @@ identToString i =
             iname ++ (replaceBySubscript <| (String.join "," <| List.map String.fromInt iindices))
 
 
+
 {-| It generates the string of a variable
 -}
 varToString : Variable -> String
@@ -1976,6 +1979,9 @@ ffolToString f =
         Equal t1 t2 ->
             "(" ++ termToString t1 ++ " = " ++ termToString t2 ++ ")"
 
+        Neg (Equal t1 t2) ->
+            "(" ++ termToString t1 ++ " != " ++ termToString t2 ++ ")"
+
         Neg p ->
             "¬" ++ ffolToString p
 
@@ -2002,7 +2008,6 @@ ffolToString f =
 
         Insat ->
             "⊥"
-
 
 {-| It generates the string of a First Order Logic Set of formulas,
 -}

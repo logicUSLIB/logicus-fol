@@ -1,8 +1,8 @@
 module LogicUS.FOL.SemanticTableauxEQ exposing
     ( SmullyanFOLType, STEQRule, FOLSemanticTableau, STEQNode
     , ffolType
-    , semanticTableauEq
-    , semanticTableauToString, semanticTableauToDOT, semanticTableauToJSON
+    , semanticTableauEq, stfoleqCheckIfClose
+    , semanticTableauToString, semanticTableauToDOT, semanticTableauToJSON, semanticTableauToDOTStyled
     )
 
 {-| The module provides the elementary tools for building the semantic tableau of a set of FOLEQ formulas.
@@ -20,12 +20,12 @@ module LogicUS.FOL.SemanticTableauxEQ exposing
 
 # Semantic Tableau Algorithm
 
-@docs semanticTableauEq
+@docs semanticTableauEq, stfoleqCheckIfClose
 
 
 # Fuctions for representation
 
-@docs semanticTableauToString, semanticTableauToDOT, semanticTableauToJSON
+@docs semanticTableauToString, semanticTableauToDOT, semanticTableauToDOTStyled, semanticTableauToJSON
 
 -}
 
@@ -63,6 +63,7 @@ type STEQRule
     | DR -- Delta (Existencial)
     | IR -- Inconsistece
     | OL -- Opened
+    | UL -- (Presummed) Undecidable
     | LL -- Leibniz Law
     | IF -- Initial formula
     | UE -- Unexplored
@@ -322,7 +323,7 @@ semanticTableauEq fs maxConstants maxSize =
     in
     let
         tableau =
-            Tuple.first <| semanticTableauEqAux (Dict.size nodes) 0 maxConstants maxSize universe nodes Dict.empty Dict.empty
+            Tuple.first <| semanticTableauEqAux (Dict.size nodes) 0 maxConstants maxSize universe nodes Dict.empty Dict.empty False
     in
     let
         newTableau =
@@ -380,9 +381,10 @@ semanticTableauEqAux :
     -> Dict Int STEQNodeAUX
     -> Dict Int ( Term, Term )
     -> Dict ( Int, Int ) Goal
+    -> Bool
     -- -> Int
     -> ( FOLSemanticTableauAUX, List Int )
-semanticTableauEqAux deep generatedConstants maxConstants maxSize universein nodesin equalities goals =
+semanticTableauEqAux deep generatedConstants maxConstants maxSize universein nodesin equalities goals undec=
     let
         nodes =
             Dict.fromList <|
@@ -445,7 +447,7 @@ semanticTableauEqAux deep generatedConstants maxConstants maxSize universein nod
                     --     viewProcessed =
                     --         Debug.log "EQ" ( i, ni )
                     -- in
-                    processEquality ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals
+                    processEquality ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals undec
 
                 -- maxDepth
                 Nothing ->
@@ -455,7 +457,7 @@ semanticTableauEqAux deep generatedConstants maxConstants maxSize universein nod
                             --     viewProcessed =
                             --         Debug.log "NE" ( i, ni )
                             -- in
-                            processInequality ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals
+                            processInequality ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals undec
 
                         Nothing ->
                             case chooseLiteral nodes of
@@ -464,7 +466,7 @@ semanticTableauEqAux deep generatedConstants maxConstants maxSize universein nod
                                     --     viewProcessed =
                                     --         Debug.log "L" ( i, ni )
                                     -- in
-                                    processLiteral ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals
+                                    processLiteral ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals undec
 
                                 Nothing ->
                                     case chooseAlpha nodes of
@@ -473,7 +475,7 @@ semanticTableauEqAux deep generatedConstants maxConstants maxSize universein nod
                                             --     viewProcessed =
                                             --         Debug.log "A" ( i, ni )
                                             -- in
-                                            processAlpha ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals
+                                            processAlpha ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals undec
 
                                         Nothing ->
                                             case chooseBeta nodes of
@@ -482,7 +484,7 @@ semanticTableauEqAux deep generatedConstants maxConstants maxSize universein nod
                                                     --     viewProcessed =
                                                     --         Debug.log "B" ( i, ni )
                                                     -- in
-                                                    processBeta ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals
+                                                    processBeta ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals undec
 
                                                 Nothing ->
                                                     case ( generatedConstants < maxConstants, chooseDelta nodes ) of
@@ -491,7 +493,7 @@ semanticTableauEqAux deep generatedConstants maxConstants maxSize universein nod
                                                             --     viewProcessed =
                                                             --         Debug.log "D" ( i, ni )
                                                             -- in
-                                                            processDelta ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals
+                                                            processDelta ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals undec
 
                                                         _ ->
                                                             let
@@ -519,7 +521,7 @@ semanticTableauEqAux deep generatedConstants maxConstants maxSize universein nod
                                                                         , u = 0
                                                                         , ut = []
                                                                         , i = deep
-                                                                        , r = OL
+                                                                        , r = if undec then UL else OL
                                                                         , p1 = Nothing
                                                                         , p2 = Nothing
                                                                         }
@@ -806,8 +808,9 @@ processEquality :
     -> Dict Int STEQNodeAUX
     -> Dict Int ( Term, Term )
     -> Dict ( Int, Int ) Goal
+    -> Bool
     -> ( FOLSemanticTableauAUX, List Int )
-processEquality ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals =
+processEquality ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals undec=
     let
         ( lhs, rhs, subs ) =
             simplifyEqualityWithEqs ((\( t1, t2 ) -> ( t1, t2, ni.simp )) <| Maybe.withDefault ( Func ( "Err", [] ) [], Func ( "Err", [] ) [] ) <| extractEQNEQTerms ni.f) equalities
@@ -867,7 +870,7 @@ processEquality ( i, ni ) deep generatedConstants maxConstants maxSize universe 
         in
         let
             ( subtree, inconsPath ) =
-                semanticTableauEqAux (deep + List.length nodesRemEqs) generatedConstants maxConstants maxSize newUniverse newNodes (Dict.fromList newEqualities) newGoals
+                semanticTableauEqAux (deep + List.length nodesRemEqs) generatedConstants maxConstants maxSize newUniverse newNodes (Dict.fromList newEqualities) newGoals undec
         in
         if List.member i inconsPath || inconsPath == [] then
             ( GTree.inner relabelNi [ subtree ], inconsPath )
@@ -880,7 +883,7 @@ processEquality ( i, ni ) deep generatedConstants maxConstants maxSize universe 
             newNodes =
                 Dict.remove i nodes
         in
-        semanticTableauEqAux deep generatedConstants maxConstants maxSize universe newNodes equalities goals
+        semanticTableauEqAux deep generatedConstants maxConstants maxSize universe newNodes equalities goals undec
 
 
 
@@ -904,8 +907,9 @@ processInequality :
     -> Dict Int STEQNodeAUX
     -> Dict Int ( Term, Term )
     -> Dict ( Int, Int ) Goal
+    -> Bool
     -> ( FOLSemanticTableauAUX, List Int )
-processInequality ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals =
+processInequality ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals undec =
     let
         ( t1, t2 ) =
             Maybe.withDefault ( Func ( "Err", [] ) [], Func ( "Err", [] ) [] ) <| extractEQNEQTerms ni.f
@@ -941,7 +945,7 @@ processInequality ( i, ni ) deep generatedConstants maxConstants maxSize univers
     in
     let
         ( subtree, inconsPath ) =
-            semanticTableauEqAux (deep + 1) generatedConstants maxConstants maxSize newUniverse newNodes equalities newGoals
+            semanticTableauEqAux (deep + 1) generatedConstants maxConstants maxSize newUniverse newNodes equalities newGoals undec
     in
     if List.member i inconsPath || inconsPath == [] then
         ( GTree.inner relabelNi [ subtree ], inconsPath )
@@ -984,8 +988,9 @@ processLiteral :
     -> Dict Int STEQNodeAUX
     -> Dict Int ( Term, Term )
     -> Dict ( Int, Int ) Goal
+    -> Bool
     -> ( FOLSemanticTableauAUX, List Int )
-processLiteral ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals =
+processLiteral ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals undec =
     let
         ( signi, psymbi, ts ) =
             Maybe.withDefault ( False, ( "Err", [] ), [] ) <| extractElemsLiteral ni.f
@@ -1042,7 +1047,7 @@ processLiteral ( i, ni ) deep generatedConstants maxConstants maxSize universe n
     in
     let
         ( subtree, inconsPath ) =
-            semanticTableauEqAux (deep + 1) generatedConstants maxConstants maxSize newUniverse newNodes equalities newGoals
+            semanticTableauEqAux (deep + 1) generatedConstants maxConstants maxSize newUniverse newNodes equalities newGoals undec
     in
     if List.member i inconsPath || inconsPath == [] then
         ( GTree.inner relabelNi [ subtree ], inconsPath )
@@ -1072,8 +1077,9 @@ processAlpha :
     -> Dict Int STEQNodeAUX
     -> Dict Int ( Term, Term )
     -> Dict ( Int, Int ) Goal
+    -> Bool
     -> ( FOLSemanticTableauAUX, List Int )
-processAlpha ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals =
+processAlpha ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals undec =
     case List.head <| List.filter (\( _, n ) -> n.u == 1 && n.f == FOL_SS.ffolNegation ni.f) <| Dict.toList nodes of
         Just ( j, _ ) ->
             closeBranch { f1 = j, f2 = i, substitutions = ( [], [] ) } deep nodes
@@ -1122,7 +1128,7 @@ processAlpha ( i, ni ) deep generatedConstants maxConstants maxSize universe nod
             in
             let
                 ( subtree, inconsPath ) =
-                    semanticTableauEqAux (deep + 2) generatedConstants maxConstants maxSize universe newNodes equalities goals
+                    semanticTableauEqAux (deep + 2) generatedConstants maxConstants maxSize universe newNodes equalities goals undec
             in
             if List.member i inconsPath || inconsPath == [] then
                 ( GTree.inner relabelNi [ subtree ], inconsPath )
@@ -1152,8 +1158,9 @@ processBeta :
     -> Dict Int STEQNodeAUX
     -> Dict Int ( Term, Term )
     -> Dict ( Int, Int ) Goal
+    -> Bool
     -> ( FOLSemanticTableauAUX, List Int )
-processBeta ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals =
+processBeta ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals undec =
     case List.head <| List.filter (\( _, n ) -> n.u == 1 && n.f == FOL_SS.ffolNegation ni.f) <| Dict.toList nodes of
         Just ( j, _ ) ->
             closeBranch { f1 = j, f2 = i, substitutions = ( [], [] ) } deep nodes
@@ -1187,7 +1194,7 @@ processBeta ( i, ni ) deep generatedConstants maxConstants maxSize universe node
             in
             let
                 ( subtree, inconsPath ) =
-                    semanticTableauEqAux (deep + 1) generatedConstants maxConstants maxSize universe newNodes1 equalities goals
+                    semanticTableauEqAux (deep + 1) generatedConstants maxConstants maxSize universe newNodes1 equalities goals undec
             in
             if inconsPath == [] then
                 let
@@ -1232,7 +1239,7 @@ processBeta ( i, ni ) deep generatedConstants maxConstants maxSize universe node
                 in
                 let
                     ( subtree2, inconsPath2 ) =
-                        semanticTableauEqAux (deep + 2) generatedConstants maxConstants maxSize universe newNodes2 equalities goals
+                        semanticTableauEqAux (deep + 2) generatedConstants maxConstants maxSize universe newNodes2 equalities goals undec
                 in
                 if inconsPath2 == [] then
                     ( GTree.inner relabelNi [ subtree, subtree2 ], [] )
@@ -1268,8 +1275,9 @@ processDelta :
     -> Dict Int STEQNodeAUX
     -> Dict Int ( Term, Term )
     -> Dict ( Int, Int ) Goal
+    -> Bool
     -> ( FOLSemanticTableauAUX, List Int )
-processDelta ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals =
+processDelta ( i, ni ) deep generatedConstants maxConstants maxSize universe nodes equalities goals undec =
     case List.head <| List.filter (\( _, n ) -> n.u == 1 && n.f == FOL_SS.ffolNegation ni.f) <| Dict.toList nodes of
         Just ( j, _ ) ->
             closeBranch { f1 = j, f2 = i, substitutions = ( [], [] ) } deep nodes
@@ -1311,7 +1319,7 @@ processDelta ( i, ni ) deep generatedConstants maxConstants maxSize universe nod
             in
             let
                 ( subtree, inconsPath ) =
-                    semanticTableauEqAux (deep + 1) (generatedConstants + 1) maxConstants maxSize (insertInUniverse universe newC) newNodes equalities goals
+                    semanticTableauEqAux (deep + 1) (generatedConstants + 1) maxConstants maxSize (insertInUniverse universe newC) newNodes equalities goals undec
             in
             if List.member i inconsPath || inconsPath == [] then
                 ( GTree.inner relabelNi [ subtree ], inconsPath )
@@ -1384,7 +1392,7 @@ processGamma ( i, ni, t ) deep generatedConstants maxConstants maxSize universe 
             in
             let
                 ( subtree, inconsPath ) =
-                    semanticTableauEqAux (deep + 1) generatedConstants maxConstants maxSize universe newNodes equalities goals
+                    semanticTableauEqAux (deep + 1) generatedConstants maxConstants maxSize universe newNodes equalities goals True
             in
             if List.member i inconsPath || inconsPath == [] then
                 ( GTree.inner relabelNi [ subtree ], inconsPath )
@@ -1539,6 +1547,9 @@ tableauNodeToString ni =
 
         OL ->
             "◯ \n\n"
+
+        UL ->
+            "ⓤ \n\n"
 
         UE ->
             "unexplored     \n\n"
@@ -1766,6 +1777,14 @@ tableauNodeToJSON ni children =
                 , ( "children", children )
                 ]
 
+        UL ->
+            JSONE.object
+                [ ( "name", JSONE.int ni.i )
+                , ( "label", JSONE.string "ⓤ" )
+                , ( "xlabel", JSONE.string "" )
+                , ( "children", children )
+                ]
+
         UE ->
             JSONE.object
                 [ ( "name", JSONE.int ni.i )
@@ -1793,8 +1812,15 @@ semanticTableauToJSON t =
 
 {-| It gives a DOT representation for the tableau.
 -}
-semanticTableauToDOT : FOLSemanticTableau -> String -> String
-semanticTableauToDOT t style =
+semanticTableauToDOT : FOLSemanticTableau -> String
+semanticTableauToDOT t =
+    "digraph{\n\n" ++ (Tuple.first <| semanticTableauNodeToDOTAux 0 -1 t) ++ "\n}"
+
+
+{-| It gives a DOT representation for the tableau, with custom styles.
+-}
+semanticTableauToDOTStyled : FOLSemanticTableau -> String -> String
+semanticTableauToDOTStyled t style =
     "digraph{\n" ++ style ++ "\n" ++ (Tuple.first <| semanticTableauNodeToDOTAux 0 -1 t) ++ "\n}"
 
 
@@ -1915,9 +1941,29 @@ semanticTableauNodeToDOTAux2 gid p ni children =
 
                 OL ->
                     ( String.fromInt gid ++ " [label=\"◯\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid), gid )
+                    
+                UL ->
+                    ( String.fromInt gid ++ " [label=\"ⓤ\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid), gid )
 
                 UE ->
                     ( String.fromInt gid ++ " [label=\"!\"];\n" ++ (String.fromInt p ++ " -> " ++ String.fromInt gid), gid )
 
                 _ ->
                     ( "", -2 )
+
+
+{-| It decides if the given tableau has all its branches closed.
+-}
+stfoleqCheckIfClose : FOLSemanticTableau -> Bool
+stfoleqCheckIfClose st =
+    case GTree.root st of
+        Just ( l, ch ) ->
+            case ch of
+                [] -> case l.r of
+                    IR -> True
+                    _ -> False
+                _ ->
+                    List.all (identity) <| List.map stfoleqCheckIfClose ch
+
+        Nothing ->
+            False

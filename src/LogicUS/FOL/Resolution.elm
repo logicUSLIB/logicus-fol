@@ -117,7 +117,31 @@ cfol2ContraryLiterals c1 c2 =
     List.foldl (\( a, sign ) ac -> ac ++ (List.map (\l -> ( ( a, sign ), l )) <| searchContraryLiteral ( a, sign ) c2)) [] c1
 
 
-{-| It searches all the pairs of literals from two clauses that have the same predicate and contrary sign
+{-| Binary factors of a clause: the clauses obtained by unifying two literals with the same sign and predicate,
+with the unifier applied. Each factor comes with its substitution. Factors of factors are obtained by iterating
+(factors enter the search as new clauses), which keeps each step polynomial.
+-}
+cfolFactors : ClauseFOL -> List ( Substitution, ClauseFOL )
+cfolFactors c =
+    LE.uniquePairs c
+        |> List.filter (\( ( a1, s1 ), ( a2, s2 ) ) -> s1 == s2 && FOL_CL.cfolAtomSymbol a1 == FOL_CL.cfolAtomSymbol a2)
+        |> List.filterMap
+            (\( ( a1, _ ), ( a2, _ ) ) ->
+                FOL_UN.atomsMGU (FOL_CL.clauseFOLAtomToAtom a1) (FOL_CL.clauseFOLAtomToAtom a2)
+                    |> Maybe.map (\sub -> ( sub, FOL_CL.cfolUnion [] (FOL_CL.cfolApplySubstitution sub c) ))
+            )
+        |> LE.uniqueBy (Tuple.second >> FOL_CL.cfolToString)
+
+
+{-| The binary factors of a clause as items of the search (both parents are the clause itself).
+-}
+factorItems : Int -> ClauseFOL -> List ResolutionItem
+factorItems id c =
+    cfolFactors c
+        |> List.map (\( sub, f ) -> { c = f, p1 = id, p2 = id, r = Dict.empty, mgu = sub })
+
+
+{-| It computes all the binary resolvents of two clauses, also between their factors (factoring keeps resolution complete). The `mgu` field includes the factoring substitution, if any.
 -}
 cfol2AllResolvents : ClauseFOL -> ClauseFOL -> List Resolvent
 cfol2AllResolvents c1 c2 =
@@ -127,29 +151,36 @@ cfol2AllResolvents c1 c2 =
 
         c2_ =
             FOL_CL.cfolApplySubstitution r c2
-    in
-    let
-        cls =
-            cfol2ContraryLiterals c1 c2_
-    in
-    List.foldl
-        (\( ( a1, sg1 ), ( a2, sg2 ) ) ac ->
-            case FOL_UN.atomsMGU (FOL_CL.clauseFOLAtomToAtom a1) (FOL_CL.clauseFOLAtomToAtom a2) of
-                Just mgu ->
-                    let
-                        c1__ =
-                            List.filter (\x -> x /= ( FOL_CL.cfolAtomApplySubstitution mgu a1, sg1 )) <| FOL_CL.cfolApplySubstitution mgu c1
 
-                        c2__ =
-                            List.filter (\x -> x /= ( FOL_CL.cfolAtomApplySubstitution mgu a2, sg2 )) <| FOL_CL.cfolApplySubstitution mgu c2_
-                    in
-                    ac ++ [ { c1 = c1, c2 = c2, r = r, mgu = mgu, res = FOL_CL.cfolUnion c1__ c2__ } ]
+        withFactors c =
+            ( Dict.empty, c ) :: cfolFactors c
+    in
+    LE.lift2 Tuple.pair (withFactors c1) (withFactors c2_)
+        |> List.concatMap
+            (\( ( f1s, f1 ), ( f2s, f2 ) ) ->
+                cfol2ContraryLiterals f1 f2
+                    |> List.filterMap
+                        (\( ( a1, sg1 ), ( a2, sg2 ) ) ->
+                            FOL_UN.atomsMGU (FOL_CL.clauseFOLAtomToAtom a1) (FOL_CL.clauseFOLAtomToAtom a2)
+                                |> Maybe.map
+                                    (\mgu ->
+                                        let
+                                            c1__ =
+                                                List.filter (\x -> x /= ( FOL_CL.cfolAtomApplySubstitution mgu a1, sg1 )) <| FOL_CL.cfolApplySubstitution mgu f1
 
-                Nothing ->
-                    ac
-        )
-        []
-        cls
+                                            c2__ =
+                                                List.filter (\x -> x /= ( FOL_CL.cfolAtomApplySubstitution mgu a2, sg2 )) <| FOL_CL.cfolApplySubstitution mgu f2
+                                        in
+                                        { c1 = c1
+                                        , c2 = c2
+                                        , r = r
+                                        , mgu = FOL_SS.substitutionComposition mgu (Dict.union f1s f2s)
+                                        , res = FOL_CL.cfolUnion c1__ c2__
+                                        }
+                                    )
+                        )
+            )
+        |> LE.uniqueBy (.res >> FOL_CL.cfolToString)
 
 
 recoverResolutionPath : Int -> Dict Int ResolutionItem -> ( List (Node ClauseFOL), List (Edge ( Substitution, Substitution )) )
@@ -165,9 +196,15 @@ recoverResolutionPath i refDict =
             in
             ( uniqueConcatList nodes1 nodes2 ++ [ Node i ri.c ]
             , uniqueConcatList edges1 edges2
-                ++ [ Edge ri.p1 i ( Dict.empty, Dict.filter (\k _ -> Set.member k (FOL_CL.cfolVarSymbols <| Maybe.withDefault [] <| Maybe.map .c <| Dict.get ri.p1 refDict)) ri.mgu )
-                   , Edge ri.p2 i ( ri.r, Dict.filter (\k _ -> Set.member k (FOL_CL.cfolVarSymbols <| Maybe.withDefault [] <| Maybe.map .c <| Dict.get ri.p2 refDict)) ri.mgu )
-                   ]
+                ++ (Edge ri.p1 i ( Dict.empty, Dict.filter (\k _ -> Set.member k (FOL_CL.cfolVarSymbols <| Maybe.withDefault [] <| Maybe.map .c <| Dict.get ri.p1 refDict)) ri.mgu )
+                        :: (if ri.p1 == ri.p2 then
+                                -- a factor has a single parent
+                                []
+
+                            else
+                                [ Edge ri.p2 i ( ri.r, Dict.filter (\k _ -> Set.member k (FOL_CL.cfolVarSymbols <| Maybe.withDefault [] <| Maybe.map .c <| Dict.get ri.p2 refDict)) ri.mgu ) ]
+                           )
+                   )
             )
 
         _ ->
@@ -187,7 +224,7 @@ resolventsWithClosedSCFResolutionAux closed id c =
                         ac2
                 )
                 ac
-                (cfol2AllResolvents ri.c c)
+                (boundedResolvents ri.c c)
         )
         []
         closed
@@ -231,10 +268,16 @@ csfolSCFResolutionAux closed opened nid =
                 in
                 recoverResolutionPath (nid + 1) refDict
 
+            else if List.length closed >= resolutionBudget then
+                -- not refuted within the bound
+                ( [], [] )
+
             else
                 let
+                    -- the given clause is also resolved with (a renamed copy of) itself
                     r_closed =
-                        resolventsWithClosedSCFResolutionAux closed (nid + 1) ri.c
+                        resolventsWithClosedSCFResolutionAux (closed ++ [ ( nid + 1, ri ) ]) (nid + 1) ri.c
+                            ++ (factorItems (nid + 1) ri.c |> List.filter (\x -> not (List.any (\( _, y ) -> FOL_CL.cfolSubsumes y.c x.c) closed)))
                 in
                 let
                     new_closed =
@@ -247,6 +290,8 @@ csfolSCFResolutionAux closed opened nid =
 
 
 {-| It uses resolution algorithm using shorted clause first heuristic for determining the feasibilibity of a set of clauses. It gives the insatisfactibility and a graph with the resolution path to inconsitence. If clause set is feasible then a graph with only initial nodes is returned.
+
+As first order resolution may not terminate, at most 300 clauses are processed and resolvents of more than 8 literals are discarded: `False` means that no refutation was found within these bounds.
 
 Note: You can render the graph with GraphViz Viewer and _resolutionTableauToDOt_ as we show in the example above.
 
@@ -277,7 +322,8 @@ csfolSCFResolution clauses =
             List.map (\x -> Node x.id ( List.member x.label cs, x.label )) nodes
                 ++ (List.indexedMap (\i x -> Node (nid_max + i + 1) ( True, x )) <| List.filter (\x -> not (List.member x nodes_clauses)) cs)
     in
-    ( edges /= [], Graph.fromNodesAndEdges final_nodes edges )
+    -- refuted if some resolution step was made or the input already contained the empty clause
+    ( edges /= [] || List.any (\n -> List.isEmpty n.label) nodes, Graph.fromNodesAndEdges final_nodes edges )
 
 
 
@@ -317,7 +363,7 @@ resolventsWithClosedSCFLinearResolutionAux closed resDone id c =
                         ac2
                 )
                 ac
-                (cfol2AllResolvents c ri.c)
+                (boundedResolvents c ri.c)
         )
         []
         (List.filter (\( i, _ ) -> not <| List.member id <| Maybe.withDefault [] <| Dict.get i resDone) <| closed)
@@ -340,7 +386,7 @@ resolventsWithOpenedSCFLinearResolutionAux opened id c =
                         ac2
                 )
                 ac
-                (cfol2AllResolvents c ri.c)
+                (boundedResolvents c ri.c)
         )
         []
         opened
@@ -350,11 +396,40 @@ resolventsWithOpenedSCFLinearResolutionAux opened id c =
 -- It performs the linear resolution algorithm with SCF heuristic
 
 
-csplSCFLinearResolutionAux : List ( Int, ResolutionItem ) -> Dict Int (List Int) -> List ( Int, ResolutionItem ) -> Int -> ( List (Node ClauseFOL), List (Edge ( Substitution, Substitution )) )
-csplSCFLinearResolutionAux closed resDone opened nid =
+{-| Maximum number of resolution steps explored by linear resolution (first order linear resolution may not
+terminate, so the search is bounded).
+-}
+linearBudget : Int
+linearBudget =
+    100
+
+
+{-| Resolvents longer than this are discarded by the search strategies (together with subsumption, this keeps the
+search finite on function-free problems; `cfol2AllResolvents` itself is not bounded).
+-}
+maxClauseLength : Int
+maxClauseLength =
+    8
+
+
+boundedResolvents : ClauseFOL -> ClauseFOL -> List Resolvent
+boundedResolvents c1 c2 =
+    List.filter (\r -> List.length r.res <= maxClauseLength) (cfol2AllResolvents c1 c2)
+
+
+{-| Maximum number of clauses processed (given clauses) by the saturation strategies (SCF, positive, negative).
+Resolution is only a semi-decision procedure: on a satisfiable set it may never stop, even without function symbols.
+-}
+resolutionBudget : Int
+resolutionBudget =
+    300
+
+
+csplSCFLinearResolutionAux : List ( Int, ResolutionItem ) -> Dict Int (List Int) -> List ( Int, ResolutionItem ) -> Int -> Int -> ( ( List (Node ClauseFOL), List (Edge ( Substitution, Substitution )) ), Int )
+csplSCFLinearResolutionAux closed resDone opened nid budget =
     case opened of
         [] ->
-            ( [], [] )
+            ( ( [], [] ), budget )
 
         ( id, rid ) :: xs ->
             if List.isEmpty rid.c then
@@ -362,7 +437,10 @@ csplSCFLinearResolutionAux closed resDone opened nid =
                     refDict =
                         Dict.fromList <| closed ++ opened
                 in
-                recoverResolutionPath id refDict
+                ( recoverResolutionPath id refDict, budget )
+
+            else if budget <= 0 then
+                ( ( [], [] ), 0 )
 
             else
                 let
@@ -370,26 +448,38 @@ csplSCFLinearResolutionAux closed resDone opened nid =
                         filterSubsumedResolutionItems <|
                             List.sortBy (\x -> List.length x.c) <|
                                 resolventsWithClosedSCFLinearResolutionAux closed resDone id rid.c
+                                    ++ (factorItems id rid.c |> List.filter (\ri -> not <| List.any (\( _, x ) -> FOL_CL.cfolSubsumes x.c ri.c) closed))
                                     ++ (List.filter (\ri -> not <| List.any (\( _, x ) -> FOL_CL.cfolSubsumes x.c ri.c) closed) <| resolventsWithOpenedSCFLinearResolutionAux xs id rid.c)
-                in
-                let
+
                     newClosed =
                         closed ++ [ ( id, rid ) ]
 
                     newResDone =
                         Dict.insert id (List.map Tuple.first <| closed ++ xs) <| Dict.map (\_ v -> v ++ [ id ]) resDone
+
+                    -- depth first, stopping at the first branch that reaches the empty clause
+                    go ris b =
+                        case ris of
+                            [] ->
+                                ( ( [], [] ), b )
+
+                            ri :: rest ->
+                                let
+                                    ( result, b2 ) =
+                                        csplSCFLinearResolutionAux newClosed newResDone (( nid + 1, ri ) :: xs) (nid + 1) (b - 1)
+                                in
+                                if List.isEmpty (Tuple.first result) then
+                                    go rest b2
+
+                                else
+                                    ( result, b2 )
                 in
-                Maybe.withDefault ( [], [] ) <|
-                    List.head <|
-                        List.filter
-                            (not << List.isEmpty << Tuple.first)
-                        <|
-                            List.map
-                                (\ri -> csplSCFLinearResolutionAux newClosed newResDone (( nid + 1, ri ) :: xs) (nid + 1))
-                                resolvents_i
+                go resolvents_i budget
 
 
 {-| It uses linear resolution algorithm using shortest clause first heuristic for determining the feasibilibity of a set of clauses. It gives the insatisfactibility (True:Insat, False:Sat) and a graph with the resolution path to inconsitence. If clause set is feasible then a graph with only initial nodes is returned.
+
+As first order resolution may not terminate, the search explores at most 100 resolution steps (resolvents of more than 8 literals are discarded): `False` means that no refutation was found within that bound.
 
 Note: You can render the graph with GraphViz Viewer and _resolutionTableauToDOT_ described at the end.
 
@@ -405,10 +495,21 @@ csfolSCFLinearResolution clauses =
             List.indexedMap (\i x -> ( i + 1, { c = x, p1 = 0, p2 = 0, r = Dict.empty, mgu = Dict.empty } )) <| List.sortBy (\x -> List.length x) <| FOL_CL.csfolRemoveSubsumedClauses <| FOL_CL.csfolRemoveTautClauses <| cs
     in
     let
+        -- Linear resolution is complete only if every input clause may be the top clause:
+        -- try them in order (shortest first) until one gives a refutation.
         ( nodes, edges ) =
-            csplSCFLinearResolutionAux [] Dict.empty new_cs (List.length new_cs + 1)
+            List.range 0 (List.length new_cs - 1)
+                |> List.foldl
+                    (\k ( found, budget ) ->
+                        if not (List.isEmpty (Tuple.first found)) then
+                            ( found, budget )
+
+                        else
+                            csplSCFLinearResolutionAux [] Dict.empty (List.drop k new_cs ++ List.take k new_cs) (List.length new_cs + 1) budget
+                    )
+                    ( ( [], [] ), linearBudget )
+                |> Tuple.first
     in
-    -- ( nodes, edges )
     let
         nid_max =
             Maybe.withDefault 0 <| List.maximum <| List.map (\x -> x.id) <| nodes
@@ -421,7 +522,8 @@ csfolSCFLinearResolution clauses =
             List.map (\x -> Node x.id ( List.member x.label cs, x.label )) nodes
                 ++ (List.indexedMap (\i x -> Node (nid_max + i + 1) ( True, x )) <| List.filter (\x -> not (List.member x nodes_clauses)) cs)
     in
-    ( edges /= [], Graph.fromNodesAndEdges final_nodes edges )
+    -- refuted if some resolution step was made or the input already contained the empty clause
+    ( edges /= [] || List.any (\n -> List.isEmpty n.label) nodes, Graph.fromNodesAndEdges final_nodes edges )
 
 
 
@@ -465,7 +567,7 @@ resolventsWithClosedSCFPositiveResolutionAux closed resDone id c =
                         ac2
                 )
                 ac
-                (cfol2AllResolvents c ri.c)
+                (boundedResolvents c ri.c)
         )
         []
         (List.filter (\( i, ri ) -> (FOL_CL.cfolIsPositive c || FOL_CL.cfolIsPositive ri.c) && (not <| List.member id <| Maybe.withDefault [] <| Dict.get i resDone)) <| closed)
@@ -484,7 +586,7 @@ resolventsWithOpenedSCFPositiveResolutionAux opened id c =
                         ac2
                 )
                 ac
-                (cfol2AllResolvents c ri.c)
+                (boundedResolvents c ri.c)
         )
         []
         (List.filter (\( _, ri ) -> FOL_CL.cfolIsPositive c || FOL_CL.cfolIsPositive ri.c) <| opened)
@@ -504,6 +606,10 @@ csplSCFPositiveResolutionAux closed resDone opened nid =
                 in
                 recoverResolutionPath id refDict
 
+            else if List.length closed >= resolutionBudget then
+                -- not refuted within the bound
+                ( [], [] )
+
             else
                 let
                     resolvents_i =
@@ -511,6 +617,7 @@ csplSCFPositiveResolutionAux closed resDone opened nid =
                             filterSubsumedResolutionItems <|
                                 List.sortBy (\x -> List.length x.c) <|
                                     resolventsWithClosedSCFPositiveResolutionAux closed resDone id rid.c
+                                    ++ (factorItems id rid.c |> List.filter (\ri -> not <| List.any (\( _, x ) -> FOL_CL.cfolSubsumes x.c ri.c) closed))
                                         ++ (List.filter (\ri -> not <| List.any (\( _, x ) -> FOL_CL.cfolSubsumes x.c ri.c) closed) <| resolventsWithOpenedSCFPositiveResolutionAux xs id rid.c)
                 in
                 let
@@ -527,6 +634,8 @@ csplSCFPositiveResolutionAux closed resDone opened nid =
 
 
 {-| It uses positive resolution algorithm using shortest clause first heuristic for determining the feasibilibity of a set of clauses. It gives the insatisfactibility (True:Insat, False:SAT) and a graph with the resolution path to inconsitence. If clause set is feasible then a graph with only initial nodes is returned.
+
+As first order resolution may not terminate, at most 300 clauses are processed and resolvents of more than 8 literals are discarded: `False` means that no refutation was found within these bounds.
 
 Note: You can render the graph with GraphViz Viewer and _resolutionTableauToDOT_ described at the end.
 
@@ -557,7 +666,8 @@ csplSCFPositiveResolution clauses =
             List.map (\x -> Node x.id ( List.member x.label cs, x.label )) nodes
                 ++ (List.indexedMap (\i x -> Node (nid_max + i + 1) ( True, x )) <| List.filter (\x -> not (List.member x nodes_clauses)) cs)
     in
-    ( edges /= [], Graph.fromNodesAndEdges final_nodes edges )
+    -- refuted if some resolution step was made or the input already contained the empty clause
+    ( edges /= [] || List.any (\n -> List.isEmpty n.label) nodes, Graph.fromNodesAndEdges final_nodes edges )
 
 
 
@@ -601,7 +711,7 @@ resolventsWithClosedSCFNegativeResolutionAux closed resDone id c =
                         ac2
                 )
                 ac
-                (cfol2AllResolvents c ri.c)
+                (boundedResolvents c ri.c)
         )
         []
         (List.filter (\( i, ri ) -> (FOL_CL.cfolIsNegative c || FOL_CL.cfolIsNegative ri.c) && (not <| List.member id <| Maybe.withDefault [] <| Dict.get i resDone)) <| closed)
@@ -620,7 +730,7 @@ resolventsWithOpenedSCFNegativeResolutionAux opened id c =
                         ac2
                 )
                 ac
-                (cfol2AllResolvents c ri.c)
+                (boundedResolvents c ri.c)
         )
         []
         (List.filter (\( _, ri ) -> FOL_CL.cfolIsNegative c || FOL_CL.cfolIsNegative ri.c) <| opened)
@@ -640,6 +750,10 @@ csplSCFNegativeResolutionAux closed resDone opened nid =
                 in
                 recoverResolutionPath id refDict
 
+            else if List.length closed >= resolutionBudget then
+                -- not refuted within the bound
+                ( [], [] )
+
             else
                 let
                     resolvents_i =
@@ -647,6 +761,7 @@ csplSCFNegativeResolutionAux closed resDone opened nid =
                             filterSubsumedResolutionItems <|
                                 List.sortBy (\x -> List.length x.c) <|
                                     resolventsWithClosedSCFNegativeResolutionAux closed resDone id rid.c
+                                    ++ (factorItems id rid.c |> List.filter (\ri -> not <| List.any (\( _, x ) -> FOL_CL.cfolSubsumes x.c ri.c) closed))
                                         ++ (List.filter (\ri -> not <| List.any (\( _, x ) -> FOL_CL.cfolSubsumes x.c ri.c) closed) <| resolventsWithOpenedSCFNegativeResolutionAux xs id rid.c)
                 in
                 let
@@ -663,6 +778,8 @@ csplSCFNegativeResolutionAux closed resDone opened nid =
 
 
 {-| It uses negative resolution algorithm using shortest clause first heuristic for determining the feasibilibity of a set of clauses. It gives the insatisfactibility (True:Insat, False:SAT) and a graph with the resolution path to inconsitence. If clause set is feasible then a graph with only initial nodes is returned.
+
+As first order resolution may not terminate, at most 300 clauses are processed and resolvents of more than 8 literals are discarded: `False` means that no refutation was found within these bounds.
 
 Note: You can render the graph with GraphViz Viewer and _resolutionTableauToDOT_ described at the end.
 
@@ -693,7 +810,8 @@ csplSCFNegativeResolution clauses =
             List.map (\x -> Node x.id ( List.member x.label cs, x.label )) nodes
                 ++ (List.indexedMap (\i x -> Node (nid_max + i + 1) ( True, x )) <| List.filter (\x -> not (List.member x nodes_clauses)) cs)
     in
-    ( edges /= [], Graph.fromNodesAndEdges final_nodes edges )
+    -- refuted if some resolution step was made or the input already contained the empty clause
+    ( edges /= [] || List.any (\n -> List.isEmpty n.label) nodes, Graph.fromNodesAndEdges final_nodes edges )
 
 
 

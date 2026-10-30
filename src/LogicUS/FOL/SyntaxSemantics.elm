@@ -43,7 +43,7 @@ import Dict exposing (Dict)
 import Graph exposing (Edge, Graph, Node, NodeId)
 import Graph.DOT exposing (defaultStyles)
 import List.Extra as LE
-import LogicUS.FOL.AuxiliarFuctions exposing (replaceBySubscript, replaceBySuperscript, uniqueConcatList)
+import LogicUS.FOL.AuxiliarFuctions exposing (parserErrorToString, replaceBySubscript, replaceBySuperscript, uniqueConcatList)
 import Maybe.Extra as ME
 import Parser exposing ((|.), (|=), Parser, Trailing(..), succeed)
 import Set exposing (Set)
@@ -1381,7 +1381,7 @@ ffolReadFromString x =
                     ( Maybe.Just y, ffolToInputString y, "" )
 
                 Err y ->
-                    ( Maybe.Nothing, "(" ++ s ++ ")", "Error: " ++ String.replace "\"" "'" (Debug.toString y) )
+                    ( Maybe.Nothing, "(" ++ s ++ ")", parserErrorToString ("(" ++ s ++ ")") 1 y )
 
 
 {-| It extract the formula readed. If it is Nothing it returns Insat
@@ -1434,10 +1434,10 @@ termToInputString x =
                    )
 
         Func ( fname, [] ) ts ->
-            (String.toLower << String.left 1) fname ++ String.dropLeft 1 fname ++ termsToString ts
+            (String.toLower << String.left 1) fname ++ String.dropLeft 1 fname ++ termsToInputString ts
 
         Func ( fname, findices ) ts ->
-            (String.toLower << String.left 1) fname ++ String.dropLeft 1 fname ++ "_{" ++ (String.join "," <| List.map String.fromInt findices) ++ "}" ++ termsToString ts
+            (String.toLower << String.left 1) fname ++ String.dropLeft 1 fname ++ "_{" ++ (String.join "," <| List.map String.fromInt findices) ++ "}" ++ termsToInputString ts
 
 
 termsToInputString : List Term -> String
@@ -1840,7 +1840,7 @@ substitutionReadFromString x =
                     ( Maybe.Just y, substitutionToInputString y, "" )
 
                 Err y ->
-                    ( Maybe.Nothing, s, "Error: " ++ String.replace "\"" "'" (Debug.toString y) )
+                    ( Maybe.Nothing, s, parserErrorToString s 0 y )
 
 
 {-| It generates the corresponding string input of a substitution

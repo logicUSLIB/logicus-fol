@@ -3,7 +3,7 @@
     "name": "logicUSLIB/logicus-fol",
     "summary": "Elm package for working with First Order Logic.",
     "license": "BSD-3-Clause",
-    "version": "3.0.0",
+    "version": "3.1.0",
     "exposed-modules": [
         "LogicUS.FOL.SyntaxSemantics",
         "LogicUS.FOL.SemanticTableaux",
@@ -12,7 +12,10 @@
         "LogicUS.FOL.Clauses",
         "LogicUS.FOL.Herbrand",
         "LogicUS.FOL.Unification",
-        "LogicUS.FOL.Resolution"
+        "LogicUS.FOL.Resolution",
+        "LogicUS.FOL.ToStringP9M4",
+        "LogicUS.FOL.Prover9Mace4",
+        "LogicUS.FOL.TPTP"
     ],
     "elm-version": "0.19.1 <= v < 0.19.2",
     "dependencies": {
@@ -24,7 +27,9 @@
         "elm-community/list-extra": "8.5.0 <= v < 9.0.0",
         "elm-community/maybe-extra": "5.2.0 <= v < 6.0.0",
         "elm-community/string-extra": "4.0.1 <= v < 5.0.0",
-        "logicUSLIB/logicus-pl": "1.0.0 <= v < 2.0.0"
+        "logicUSLIB/logicus-pl": "4.1.0 <= v < 5.0.0"
     },
-    "test-dependencies": {}
+    "test-dependencies": {
+        "elm-explorations/test": "2.2.0 <= v < 3.0.0"
+    }
 }

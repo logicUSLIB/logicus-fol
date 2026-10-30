@@ -39,7 +39,8 @@ module LogicUS.FOL.Clauses exposing
 -- IMPORTS --
 --=========--
 
-import LogicUS.FOL.AuxiliarFuctions exposing (cleanSpaces, uniqueConcatList)
+import Dict
+import LogicUS.FOL.AuxiliarFuctions exposing (cleanSpaces, parserErrorToString, uniqueConcatList)
 import LogicUS.FOL.NormalForms as FOL_NF
 import LogicUS.FOL.SyntaxSemantics as FOL_SS exposing (FormulaFOL(..), Ident, SetFOL, Substitution, Term(..), Variable)
 import Parser exposing ((|.), (|=), Parser, Trailing(..), succeed)
@@ -205,11 +206,78 @@ cfolUnion c1 c2 =
     List.sortWith compareClauseFOLLiterals <| uniqueConcatList [] (c1 ++ c2)
 
 
-{-| Indicates if the first clause subsumes the second, that is, if the first is entirely contained in the second.
+{-| Indicates if the first clause subsumes the second (θ-subsumption): there is a substitution θ of the variables of the first clause such that every literal of c1θ is in c2. Only the variables of the first clause are instantiated, and c1 may not have more literals than c2 (so a clause does not subsume its own factors).
+
+    cfolSubsumes [ ( P ( "P", [] ) [ Var ( "X", [], 0 ) ], True ) ] [ ( P ( "P", [] ) [ Func ( "a", [] ) [] ], True ), ( P ( "Q", [] ) [], True ) ] == True
+
 -}
 cfolSubsumes : ClauseFOL -> ClauseFOL -> Bool
 cfolSubsumes c1 c2 =
-    List.all (\x -> List.member x c2) c1
+    let
+        matchTerm : Term -> Term -> Substitution -> Maybe Substitution
+        matchTerm t u sub =
+            case t of
+                Var v ->
+                    case Dict.get v sub of
+                        Just w ->
+                            if w == u then
+                                Just sub
+
+                            else
+                                Nothing
+
+                        Nothing ->
+                            Just (Dict.insert v u sub)
+
+                Func f ts ->
+                    case u of
+                        Func g us ->
+                            if f == g && List.length ts == List.length us then
+                                matchTerms ts us sub
+
+                            else
+                                Nothing
+
+                        Var _ ->
+                            Nothing
+
+        matchTerms ts us sub =
+            List.foldl (\( t, u ) acc -> Maybe.andThen (matchTerm t u) acc) (Just sub) (List.map2 Tuple.pair ts us)
+
+        matchLiteral : ClauseFOLLiteral -> ClauseFOLLiteral -> Substitution -> List Substitution
+        matchLiteral ( a1, s1 ) ( a2, s2 ) sub =
+            if s1 /= s2 then
+                []
+
+            else
+                case ( a1, a2 ) of
+                    ( P p ts, P q us ) ->
+                        if p == q && List.length ts == List.length us then
+                            List.filterMap identity [ matchTerms ts us sub ]
+
+                        else
+                            []
+
+                    ( Eq t1 t2, Eq u1 u2 ) ->
+                        -- equality is symmetric
+                        List.filterMap identity [ matchTerms [ t1, t2 ] [ u1, u2 ] sub, matchTerms [ t1, t2 ] [ u2, u1 ] sub ]
+
+                    _ ->
+                        []
+
+        search lits sub =
+            case lits of
+                [] ->
+                    True
+
+                l :: rest ->
+                    List.any (\l2 -> List.any (search rest) (matchLiteral l l2 sub)) c2
+    in
+    -- cheap rejection first: every literal of c1 needs some literal of c2 it can match on its own
+    List.length c1
+        <= List.length c2
+        && List.all (\l -> List.any (\l2 -> not (List.isEmpty (matchLiteral l l2 Dict.empty))) c2) c1
+        && search (List.sortBy (\l -> List.length (List.filter (\l2 -> not (List.isEmpty (matchLiteral l l2 Dict.empty))) c2)) c1) Dict.empty
 
 
 {-| Indicates if the clause is a tautology, that is if it contains a literal and its complement.
@@ -304,32 +372,36 @@ clauseFOLLitToLiteral ( a, sign ) =
 csfolFromCNF : FormulaFOL -> Maybe ClauseFOLSet
 csfolFromCNF f =
     let
-        csfolFromCNFAux g =
+        -- Nothing: not a clause; Just Nothing: a clause with ⊤ (always true, so it is dropped)
+        clause : FormulaFOL -> Maybe (Maybe ClauseFOL)
+        clause g =
             case g of
                 Pred p ts ->
-                    Just [ [ ( P p ts, True ) ] ]
+                    Just (Just [ ( P p ts, True ) ])
 
                 Neg (Pred p ts) ->
-                    Just [ [ ( P p ts, False ) ] ]
+                    Just (Just [ ( P p ts, False ) ])
 
                 Equal t1 t2 ->
-                    Just [ [ ( Eq t1 t2, True ) ] ]
+                    Just (Just [ ( Eq t1 t2, True ) ])
 
                 Neg (Equal t1 t2) ->
-                    Just [ [ ( Eq t1 t2, False ) ] ]
+                    Just (Just [ ( Eq t1 t2, False ) ])
 
                 Disj g1 g2 ->
-                    Maybe.map (\c -> [ c ]) <|
-                        Maybe.map cfolSort <|
-                            Maybe.map2 uniqueConcatList
-                                (Maybe.map List.concat <| csfolFromCNFAux g1)
-                                (Maybe.map List.concat <| csfolFromCNFAux g2)
+                    Maybe.map2 (Maybe.map2 uniqueConcatList) (clause g1) (clause g2)
 
                 Insat ->
-                    Just [ [] ]
+                    Just (Just [])
+
+                Neg Taut ->
+                    Just (Just [])
 
                 Taut ->
-                    Just []
+                    Just Nothing
+
+                Neg Insat ->
+                    Just Nothing
 
                 _ ->
                     Nothing
@@ -338,33 +410,17 @@ csfolFromCNF f =
         Conj f1 f2 ->
             Maybe.map2 uniqueConcatList (csfolFromCNF f1) (csfolFromCNF f2)
 
-        Pred p ts ->
-            Just [ [ ( P p ts, True ) ] ]
-
-        Neg (Pred p ts) ->
-            Just [ [ ( P p ts, False ) ] ]
-
-        Equal t1 t2 ->
-            Just [ [ ( Eq t1 t2, True ) ] ]
-
-        Neg (Equal t1 t2) ->
-            Just [ [ ( Eq t1 t2, False ) ] ]
-
-        Disj f1 f2 ->
-            Maybe.map (\c -> [ c ]) <|
-                Maybe.map cfolSort <|
-                    Maybe.map2 uniqueConcatList
-                        (Maybe.map List.concat <| csfolFromCNFAux f1)
-                        (Maybe.map List.concat <| csfolFromCNFAux f2)
-
-        Insat ->
-            Just [ [] ]
-
-        Taut ->
-            Just []
-
         _ ->
-            Nothing
+            clause f
+                |> Maybe.map
+                    (\m ->
+                        case m of
+                            Just c ->
+                                [ cfolSort c ]
+
+                            Nothing ->
+                                []
+                    )
 
 
 {-| Express a formula as a Set of clauses.
@@ -405,15 +461,15 @@ cfolReadFromString x =
                     ( (Maybe.Just << cfolSort) y, "", "" )
 
                 Err y ->
-                    ( Maybe.Nothing, clean_x, "Error: " ++ String.replace "\"" "'" (Debug.toString y) )
+                    ( Maybe.Nothing, clean_x, parserErrorToString clean_x 0 y )
 
         _ ->
             case Parser.run cfolParser ("{" ++ clean_x ++ "}") of
                 Ok y ->
-                    ( Maybe.Just y, "", "" )
+                    ( (Maybe.Just << cfolSort) y, "", "" )
 
                 Err y ->
-                    ( Maybe.Nothing, "{" ++ clean_x ++ "}", "Error: " ++ String.replace "\"" "'" (Debug.toString y) )
+                    ( Maybe.Nothing, "{" ++ clean_x ++ "}", parserErrorToString ("{" ++ clean_x ++ "}") 1 y )
 
 
 {-| It extracts the clause readed. If it is Nothing then it returns an empty clause

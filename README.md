@@ -21,6 +21,14 @@ The _LogicUS.FOL_ packages allow working with formulas and sets in First Order L
 
 - **_LogicUS.FOL.Unification_**: It provides the functions for working with the unification algorithms: terms and atoms MGU.
 
-- **_LogicUS.FOL.Resolution_**: It gives the functions for working with the resolution algorithm in FOL and its representation. (Future features: resolution strategies).
+- **_LogicUS.FOL.Resolution_**: It gives the functions for working with the resolution algorithm in FOL and its representation, with several strategies (shortest clause first, linear, positive, negative).
+
+- **_LogicUS.FOL.SemanticTableauxEQ_**: Semantic tableaux for first order logic with equality.
+
+- **_LogicUS.FOL.Prover9Mace4_** and **_LogicUS.FOL.TPTP_**: For problems too big for the didactic algorithms, they translate a problem to the input of external provers ([Prover9 and Mace4](https://www.cs.unm.edu/~mccune/prover9/), and any prover that reads [TPTP](https://www.tptp.org), such as [E](https://eprover.org)) and read their answers back. Mace4 models are returned as L-structures, so they can be checked and shown with the rest of the library. Running the provers is up to the application.
+
+## Tests
+
+`tests/` contains semantic tests that compare the algorithms with a reference implementation on small finite structures. Run them with `npx elm-test`.
 
 You can access to the installation guide, theoretical and practical contents, and more at [LogicUS](https://ramgonvictor.wixsite.com/logicus).

@@ -497,20 +497,19 @@ semanticTableauEqAux deep generatedConstants maxConstants maxSize universein nod
 
                                                         _ ->
                                                             let
-                                                                universe_ =
+                                                                -- With an empty universe the γ rule needs a constant: it must be
+                                                                -- registered (counter and universe), otherwise a later δ rule would
+                                                                -- reuse it as if it were new, which is unsound.
+                                                                ( universe_, generated_ ) =
                                                                     if List.isEmpty universe then
-                                                                        [ Func ( "κ", [ generatedConstants ] ) [] ]
+                                                                        ( insertInUniverse universe (Func ( "κ", [ generatedConstants ] ) []), generatedConstants + 1 )
 
                                                                     else
-                                                                        universe
+                                                                        ( universe, generatedConstants )
                                                             in
                                                             case chooseGamma universe_ nodes of
                                                                 Just ( i, ni, t :: _ ) ->
-                                                                    -- let
-                                                                    --     viewProcessed =
-                                                                    --         Debug.log "G" ( i, ni, t )
-                                                                    -- in
-                                                                    processGamma ( i, ni, t ) deep generatedConstants maxConstants maxSize universe nodes equalities goals
+                                                                    processGamma ( i, ni, t ) deep generated_ maxConstants maxSize universe_ nodes equalities goals
 
                                                                 _ ->
                                                                     ( GTree.leaf

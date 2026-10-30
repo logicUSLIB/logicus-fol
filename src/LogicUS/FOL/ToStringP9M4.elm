@@ -1,5 +1,14 @@
 module LogicUS.FOL.ToStringP9M4 exposing (ffol2P9M4Str, ffol2P9M4Str2, sfol2P9M4Str, sfol2P9M4Str2, ffol2P9M4StrUnsafe, sfol2P9M4StrUnsafe)
 
+{-| Translation of formulas to the syntax of Prover9 and Mace4.
+
+**Deprecated:** use `LogicUS.FOL.Prover9Mace4`, which builds the whole input file with readable symbol names and
+reads Mace4 models back. This module is kept for compatibility.
+
+@docs ffol2P9M4Str, ffol2P9M4Str2, sfol2P9M4Str, sfol2P9M4Str2, ffol2P9M4StrUnsafe, sfol2P9M4StrUnsafe
+
+-}
+
 import Tuple exposing (first)
 import LogicUS.FOL.SyntaxSemantics exposing (FormulaFOL(..))
 import Dict exposing (Dict)
@@ -8,17 +17,23 @@ import LogicUS.FOL.SyntaxSemantics exposing (Variable)
 import LogicUS.FOL.SyntaxSemantics exposing (Ident)
 import LogicUS.FOL.SyntaxSemantics exposing (Term(..))
 
+{-| It translates a formula to Prover9/Mace4 syntax, renaming predicates, functions, constants and variables to P0, f0, c0, A, B... (Deprecated.)
+-}
 ffol2P9M4Str : FormulaFOL -> String
 ffol2P9M4Str f =
     (first <| ffol2P9M4Str2 f {vi = 0, vdic = Dict.empty, ci = 0, cdic = Dict.empty, fi = 0, fdic = Dict.empty, pi = 0, pdic = Dict.empty}) ++ "."
 
 
+{-| It translates a set of formulas to Prover9/Mace4 syntax, one per line, with the same renaming as `ffol2P9M4Str`. (Deprecated.)
+-}
 sfol2P9M4Str : SetFOL -> String
 sfol2P9M4Str fs =
     Tuple.first <| sfol2P9M4Str2 fs {vi = 0, vdic = Dict.empty, ci = 0, cdic = Dict.empty, fi = 0, fdic = Dict.empty, pi = 0, pdic = Dict.empty}
 
 
 
+{-| Like `sfol2P9M4Str`, but it receives and returns the renaming tables, so several sets can share them. (Deprecated.)
+-}
 sfol2P9M4Str2 : List FormulaFOL -> { vi : Int, vdic : Dict Variable Int, pi : Int, pdic : Dict Ident Int, fi : Int, fdic : Dict Ident Int, ci : Int, cdic : Dict Ident Int } -> ( String, { vi : Int, vdic : Dict Variable Int, pi : Int, pdic : Dict Ident Int, fi : Int, fdic : Dict Ident Int, ci : Int, cdic : Dict Ident Int } )
 sfol2P9M4Str2 fs ini =
      List.foldl 
@@ -26,6 +41,8 @@ sfol2P9M4Str2 fs ini =
         ("", ini)
         fs
 
+{-| Like `ffol2P9M4Str`, but it receives and returns the renaming tables. (Deprecated.)
+-}
 ffol2P9M4Str2 : 
     FormulaFOL 
     -> { vi : Int, vdic : Dict Variable Int, pi : Int, pdic : Dict Ident Int, fi : Int, fdic : Dict Ident Int, ci: Int, cdic : Dict Ident Int }
@@ -144,10 +161,14 @@ ffol2P9M4Str2 f info =
         Insat -> ("$F", info)
 
 
+{-| It translates a formula to Prover9/Mace4 syntax keeping the symbol names between quotes. (Deprecated.)
+-}
 ffol2P9M4StrUnsafe : FormulaFOL -> String
 ffol2P9M4StrUnsafe f =
     (first <| ffol2P9M4StrUnsafe2 f (0, Dict.empty)) ++ "."
 
+{-| It translates a set of formulas to Prover9/Mace4 syntax keeping the symbol names between quotes. (Deprecated.)
+-}
 sfol2P9M4StrUnsafe : SetFOL -> String
 sfol2P9M4StrUnsafe fs =
     String.join "\n" <| List.map ffol2P9M4StrUnsafe fs

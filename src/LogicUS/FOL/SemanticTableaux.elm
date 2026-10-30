@@ -521,11 +521,13 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges undec=
                                                             )
 
 
-{-| It check if a tableau has all his branches closed
+{-| It checks if a tableau has all its branches closed. A branch cut by the depth limits counts as not closed, so `False` means "not refuted within the limits", not "satisfiable".
 -}
 semanticTableauIsInsat : FOLSemanticTableau -> Bool
 semanticTableauIsInsat t =
-    not <| List.any (\x -> Tuple.first x.label == 1 || Tuple.first x.label == 1) <| Graph.nodes t
+    -- Closed only if no leaf is open (1) or cut by the depth limit (2): a branch that was not
+    -- finished proves nothing.
+    not <| List.any (\x -> Tuple.first x.label == 1 || Tuple.first x.label == 2) <| Graph.nodes t
 
 
 {-| It allows to represent a FOL Semantic Tableau as a string

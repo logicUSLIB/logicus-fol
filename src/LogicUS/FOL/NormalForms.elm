@@ -911,14 +911,16 @@ ffolToSkolem2Aux b i f =
 -}
 sfolToSkolem : SetFOL -> SetFOL
 sfolToSkolem fs =
+    -- Same preprocessing as ffolToSkolem (the Skolem functions are numbered across the whole set,
+    -- so formulas do not share them by accident).
     Tuple.first <|
         List.foldl
             (\f ( ls, i ) ->
                 let
                     ( g, j ) =
-                        ffolToSkolem2Aux True i f
+                        ffolToSkolem2Aux True i (ffolInteriorizeNeg (FOL_SS.ffolRenameVars (ffolRemoveAllEquiv f)))
                 in
-                ( ls ++ [ g ], j )
+                ( ls ++ [ ffolToPrenex g ], j )
             )
             ( [], 1 )
             fs

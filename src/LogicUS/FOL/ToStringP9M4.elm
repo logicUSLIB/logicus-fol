@@ -41,7 +41,11 @@ sfol2P9M4Str2 fs ini =
         ("", ini)
         fs
 
-{-| Like `ffol2P9M4Str`, but it receives and returns the renaming tables. (Deprecated.)
+{-| Like `ffol2P9M4Str`, but it receives and returns the renaming tables, so that several formulas can share them.
+The record holds, for variables (`vi`, `vdic`), predicates (`pi`, `pdic`), functions (`fi`, `fdic`) and constants
+(`ci`, `cdic`), the next free index and the dictionary from each original symbol to its index. The symbols are written
+as `A`, `B`, ... (variables), `P0`, `P1`, ... (predicates), `f0`, `f1`, ... (functions) and `c0`, `c1`, ... (constants).
+Start with every index at 0 and every dictionary empty. (Deprecated: use `LogicUS.FOL.Prover9Mace4`.)
 -}
 ffol2P9M4Str2 : 
     FormulaFOL 

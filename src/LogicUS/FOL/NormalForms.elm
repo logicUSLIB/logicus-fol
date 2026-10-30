@@ -796,8 +796,9 @@ ffolToSkolem : FormulaFOL -> FormulaFOL
 ffolToSkolem f =
     if ffolIsPrenex f then
         let
+            -- rename apart first: in ∃x∀x P(x) the substitution for the outer x must not reach the inner one
             ( lc, g ) =
-                extractHeaderQuantifiers f
+                extractHeaderQuantifiers (FOL_SS.ffolRenameVars f)
         in
         FOL_SS.ffolApplySubstitution (getSkolemSubs lc) g
 

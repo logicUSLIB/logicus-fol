@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.1.1
+
+### Fixed
+
+- `ffolToSkolem` (and so `ffolToNNF`, `ffolToCNF`, `ffolToClauses`) did not rename variables apart in prenex formulas:
+  in `∃x∀x P(x)` the Skolem constant of the outer `x` replaced the inner one.
+- `SemanticTableauxEQ` could overflow the call stack (in browsers and in `elm-test`) on long branches; branches longer
+  than 150 nodes are now left undecided (never counted as closed).
+
 ## 3.1.0
 
 Correctness fixes found by a new suite of semantic tests (`tests/`), which compares the algorithms with a reference

@@ -439,6 +439,52 @@ semanticTableauEqAux deep generatedConstants maxConstants maxSize universein nod
             closeBranch inconsistence deep nodes
 
         Nothing ->
+            if deep > maxBranchLength then
+                -- Branch too long (the tree is built recursively, so very long branches would overflow the
+                -- call stack, and they are unreadable anyway): it is left undecided, never counted as closed.
+                ( GTree.leaf
+                    { f = FOL_SS.Taut
+                    , simp = []
+                    , t = T
+                    , subs = Nothing
+                    , u = 0
+                    , ut = []
+                    , i = deep
+                    , r = UL
+                    , p1 = Nothing
+                    , p2 = Nothing
+                    }
+                , []
+                )
+
+            else
+                semanticTableauEqStep deep generatedConstants maxConstants maxSize universe nodes equalities goals undec
+
+
+{-| Maximum number of nodes of a branch of a tableau with equality.
+-}
+maxBranchLength : Int
+maxBranchLength =
+    150
+
+
+semanticTableauEqStep :
+    Int
+    -> Int
+    -> Int
+    -> Int
+    -> List Term
+    -> Dict Int STEQNodeAUX
+    -> Dict Int ( Term, Term )
+    -> Dict ( Int, Int ) Goal
+    -> Bool
+    -> ( FOLSemanticTableauAUX, List Int )
+semanticTableauEqStep deep generatedConstants maxConstants maxSize universe nodes equalities goals undec =
+    case checkGoals goals of
+        Just inconsistence ->
+            closeBranch inconsistence deep nodes
+
+        Nothing ->
             case
                 chooseEquality nodes
             of

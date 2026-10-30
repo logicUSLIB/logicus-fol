@@ -56,6 +56,13 @@ suite =
                 STEQ.semanticTableauEq [ SS.ffolRead "!A[Y] !E[X] ¬Q(X,Y)", SS.ffolRead "!A[X] Q(X,X)" ] 3 3
                     |> STEQ.stfoleqCheckIfClose
                     |> Expect.equal False
+        , test "ffolToSkolem renames apart a prenex formula: ∃x∀x P(x) means ∀x P(x)" <|
+            \_ ->
+                SS.ffolRead "!E[X] !A[X] P(X)"
+                    |> NF.ffolToSkolem
+                    |> O.quantifierFree
+                    |> (\qf -> ( qf, List.isEmpty (SS.ffolConstSymbols (NF.ffolToSkolem (SS.ffolRead "!E[X] !A[X] P(X)"))) ))
+                    |> Expect.equal ( True, True )
         , test "ffolToInputString writes variables inside function arguments in input syntax" <|
             \_ -> SS.ffolToInputString (SS.ffolRead "!A[X]P(f(X))") |> SS.ffolRead |> Expect.equal (SS.ffolRead "!A[X]P(f(X))")
         , test "ffolToClauses: ⊤ ∨ ⊤ gives no clauses (it gave the empty clause)" <|

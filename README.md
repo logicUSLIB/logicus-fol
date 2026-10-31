@@ -25,6 +25,8 @@ The _LogicUS.FOL_ packages allow working with formulas and sets in First Order L
 
 - **_LogicUS.FOL.SemanticTableauxEQ_**: Semantic tableaux for first order logic with equality.
 
+- **_LogicUS.FOL.SemanticTableauxFV_**: Semantic tableaux with free variables: the universal formulas are instantiated with new variables, which get their values by unification when a branch is closed, and the search backtracks over the ways of closing the branches. It finds closed tableaux that the ground tableaux of _SemanticTableaux_ only find with the right terms, and the tree shows each variable and the substitution that closes each branch.
+
 - **_LogicUS.FOL.Prover9Mace4_** and **_LogicUS.FOL.TPTP_**: For problems too big for the didactic algorithms, they translate a problem to the input of external provers ([Prover9 and Mace4](https://www.cs.unm.edu/~mccune/prover9/), and any prover that reads [TPTP](https://www.tptp.org), such as [E](https://eprover.org)) and read their answers back. Mace4 models are returned as L-structures, so they can be checked and shown with the rest of the library. Running the provers is up to the application.
 
 ## Tests

@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.2.0
+
+### Added
+
+- `LogicUS.FOL.SemanticTableauxFV`: semantic tableaux with free variables. A γ formula is instantiated with a new
+  variable, a δ formula with a Skolem term on the free variables of the formula (the δ⁺ rule), and two literals
+  close a branch when their atoms unify; the unifier applies to every branch, and the search backtracks over the
+  ways of closing them. The number of uses of each γ formula in a branch grows up to a limit (iterative deepening).
+  The answer is `Closed` (unsatisfiable), `Open` (a fully expanded open branch without γ formulas: satisfiable) or
+  `Unknown`, and the tree (as text or DOT) shows the variables and the bindings made by each closure. It closes 26
+  of the Pelletier problems 18–46 (all but 34, 38 and 43) in a few milliseconds each; the ground tableau of
+  `SemanticTableaux` closes 16 of them with its usual limits.
+
+### Changed
+
+- `SemanticTableaux.semanticTableau` is up to twice as fast on large tableaux: each step only compares the new nodes
+  with the branch, instead of every pair of nodes. The tableaux are the same as before.
+
 ## 3.1.1
 
 ### Fixed

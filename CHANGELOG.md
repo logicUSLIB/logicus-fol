@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.2.1
+
+### Changed
+
+- The three semantic tableaux (`SemanticTableaux`, `SemanticTableauxEQ`, `SemanticTableauxFV`) show their trees in
+  the same way, as text, DOT and (`SemanticTableauxEQ`) JSON:
+  - each formula is numbered by its depth in the branch, and the number is shown in the node: `5. ¬P(a)` (the two
+    components of a β rule have the same number);
+  - the edges show the rule and the numbers of its premises: `α(4)`, `β(4)`, `γ(1){x/a}`, `δ(3){x/c₁}`, `¬¬(2)`,
+    and in the equality tableau the equalities used by Leibniz law: `α(9).𝓛𝓛8`, `𝓛𝓛8(5)`;
+  - a closed branch ends in `✕`, with the edge `⊥(3,6)` (the contradictory formulas); an open branch in `◯`, a
+    branch stopped by the limits in `ⓤ` and a branch not explored in `…`. These symbols are in common fonts (`🗴`
+    and `⭘` were shown as empty boxes in some browsers).
+  - the text form has a node per line, with its rule aligned on the right; the branches of a β rule are indented.
+- The equality tableau names its new constants `c₁`, `c₂`, ... (the first ones not used by the input) instead of
+  `κ₀`, `κ₁`, ..., like the other two tableaux.
+
+### Fixed
+
+- `SemanticTableaux`: the label of a δ rule gave an internal key instead of the number of its formula.
+
 ## 3.2.0
 
 ### Added

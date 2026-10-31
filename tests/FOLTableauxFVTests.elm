@@ -122,23 +122,22 @@ suite =
             \_ ->
                 FV.semanticTableauFVToString (tableau [ "!A[X](P(X) -> Q(X))", "!A[X]P(X)", "¬Q(a)" ])
                     |> String.lines
-                    |> List.map String.trim
                     |> Expect.equal
-                        [ "F₁≡∀x(P(x) → Q(x))"
-                        , "F₂≡∀xP(x)"
-                        , "F₃≡¬Q(a)"
-                        , "F₄≡(P(x₁) → Q(x₁))   [γ(F₁,{x/x₁})]"
-                        , "F₅≡¬P(x₁)   [β₁(F₄)]"
-                        , "F₆≡P(x₂)   [γ(F₂,{x/x₂})]"
-                        , "🗴   [⟂(F₅,F₆){x₂/x₁}]"
-                        , "F₇≡Q(x₁)   [β₂(F₄)]"
-                        , "🗴   [⟂(F₃,F₇){x₁/a}]"
+                        [ "1. ∀x(P(x) → Q(x))"
+                        , "2. ∀xP(x)"
+                        , "3. ¬Q(a)"
+                        , "4. (P(x₁) → Q(x₁))    % γ(1){x/x₁}"
+                        , "    5. ¬P(x₁)         % β(4)"
+                        , "    6. P(x₂)          % γ(2){x/x₂}"
+                        , "    ✕                 % ⊥(5,6){x₂/x₁}"
+                        , "    5. Q(x₁)          % β(4)"
+                        , "    ✕                 % ⊥(3,5){x₁/a}"
                         , "Closed tableau (each γ formula used at most once in a branch): the set is unsatisfiable. σ = {x₁/a, x₂/a}"
                         ]
         , test "δ: a Skolem term on the free variables of the formula" <|
             \_ ->
                 FV.semanticTableauFVToString (FV.semanticTableauFVWith { gammaUses = 1, depth = 10, steps = 1000 } [ SS.ffolRead "!A[Y]!E[X]¬Q(X,Y)" ])
-                    |> String.contains "δ(F₂)⇒{x/ş₁(y₁)}"
+                    |> String.contains "δ(2){x/ş₁(y₁)}"
                     |> Expect.equal True
         , test "a set with a γ formula and no closed tableau is unknown" <|
             \_ -> tableau [ "!A[X]P(X)" ] |> .result |> isUnknown |> Expect.equal True

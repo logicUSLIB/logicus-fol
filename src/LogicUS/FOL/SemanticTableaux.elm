@@ -31,11 +31,11 @@ module LogicUS.FOL.SemanticTableaux exposing
 
 import Dict exposing (Dict)
 import Graph exposing (Edge, Graph, Node, nodes)
-import Graph.DOT
+import Graph.DOT exposing (Rankdir(..), Styles)
 import List.Extra as LE
-import LogicUS.FOL.AuxiliarFuctions exposing (replaceBySubscript, uniqueConcatList)
+import LogicUS.FOL.AuxiliarFuctions exposing (uniqueConcatList)
 import LogicUS.FOL.SyntaxSemantics as FOL_SS exposing (FormulaFOL(..), SetFOL, Substitution, Term(..), Variable)
-import Graph.DOT exposing (Styles)
+import LogicUS.FOL.TableauDisplay as TD exposing (DTree(..))
 
 
 {-| It defines the type of a PL formula which can be a _Literal_, _Double Negation_, _Alpha_, _Beta_, _Gamma_ (forall), _Delta_(exists) _Insat_ or _Taut_
@@ -505,7 +505,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges undec newKeys =
                                                             Dict.insert i ( 0, { ti | u = 0 } ) nodes
 
                                                     new_edges =
-                                                        Dict.insert ( nidp, nid ) (Just { r = D, is = [ i ], br = 1, s = Dict.singleton v c }) edges
+                                                        Dict.insert ( nidp, nid ) (Just { r = D, is = [ ti.i ], br = 1, s = Dict.singleton v c }) edges
                                                 in
                                                 semanticTableauAux (m ++ [ c ]) dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes new_edges undec [ nid ]
 
@@ -574,163 +574,125 @@ semanticTableauIsInsat t =
     not <| List.any (\x -> Tuple.first x.label == 1 || Tuple.first x.label == 2) <| Graph.nodes t
 
 
-{-| It allows to represent a FOL Semantic Tableau as a string
+-- The tree of the tableau, as the three tableaux of the library show it (see TableauDisplay).
+
+
+toDTrees : FOLSemanticTableau -> List DTree
+toDTrees t =
+    let
+        labels =
+            Dict.fromList <| List.map (\n -> ( n.id, n.label )) <| Graph.nodes t
+
+        incoming =
+            Dict.fromList <| List.map (\e -> ( e.to, e.label )) <| Graph.edges t
+
+        children =
+            Dict.map (\_ l -> List.sort l) <|
+                List.foldl (\e d -> Dict.update e.from (\l -> Just (e.to :: Maybe.withDefault [] l)) d) Dict.empty (Graph.edges t)
+
+        nodeLabel ( kind, ti ) =
+            if kind == -1 then
+                TD.closedMark
+
+            else if kind == 1 then
+                TD.openMark
+
+            else if kind == 2 then
+                TD.undecidedMark
+
+            else
+                TD.numbered (ti.i + 1) ti.f
+
+        edgeLabel ei =
+            let
+                nums =
+                    List.map (\ind -> String.fromInt (ind + 1)) ei.is
+            in
+            case ei.r of
+                DN ->
+                    TD.rule "¬¬" nums ""
+
+                A ->
+                    TD.rule "α" nums ""
+
+                B ->
+                    TD.rule "β" nums ""
+
+                G ->
+                    TD.rule "γ" nums (TD.substitution ei.s)
+
+                D ->
+                    TD.rule "δ" nums (TD.substitution ei.s)
+
+                I ->
+                    TD.rule "⊥" nums ""
+
+                L ->
+                    "L"
+
+                E ->
+                    "E"
+
+                T ->
+                    "T"
+
+        build id =
+            DTree
+                { node = Maybe.withDefault "" <| Maybe.map nodeLabel <| Dict.get id labels
+                , edge = Maybe.withDefault "" <| Maybe.map edgeLabel <| Maybe.andThen identity <| Dict.get id incoming
+                }
+                (List.map build <| Maybe.withDefault [] <| Dict.get id children)
+    in
+    List.map build <| List.filter (\id -> not (Dict.member id incoming)) <| Dict.keys labels
+
+
+{-| It represents a FOL Semantic Tableau as a string: a node per line, indented by its depth, with the rule that
+produced it. Each formula is numbered by its depth in the branch: `5. ¬P(a)   % α(4)`.
 -}
 semanticTableauToString : FOLSemanticTableau -> String
 semanticTableauToString t =
-    let
-        toStringNode =
-            \( i, ti ) ->
-                Just <|
-                    if i == -1 then
-                        "X"
-
-                    else if i == 1 then
-                        "◯"
-
-                    else if i == 2 then
-                        "ⓤ"
-
-                    else
-                        "F" ++ (replaceBySubscript <| String.fromInt (ti.i + 1)) ++ "≡" ++ FOL_SS.ffolToString ti.f
-
-        toStringEdge =
-            \ei ->
-                case ei.r of
-                    L ->
-                        "L"
-
-                    E ->
-                        "E"
-
-                    DN ->
-                        "dN(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")"
-
-                    A ->
-                        "α" ++ (replaceBySubscript <| String.fromInt ei.br) ++ "(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")"
-
-                    B ->
-                        "β" ++ (replaceBySubscript <| String.fromInt ei.br) ++ "(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")"
-
-                    G ->
-                        "γ(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ "," ++ FOL_SS.substitutionToString ei.s ++ ")"
-
-                    D ->
-                        "δ(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")⇒" ++ FOL_SS.substitutionToString ei.s
-
-                    I ->
-                        "⟂(" ++ (String.join "," <| List.map (\ind -> "F" ++ (replaceBySubscript <| String.fromInt (ind + 1))) ei.is) ++ ")"
-
-                    T ->
-                        "T"
-    in
-    Graph.toString toStringNode (Maybe.map toStringEdge) <| t
+    TD.toText (toDTrees t)
 
 
-{-| It allows to represent a FOL Semantic Tableau as a DOT String rederable by GraphViz
+{-| It represents a FOL Semantic Tableau as a DOT String renderable by GraphViz. Each formula is numbered by its
+depth in the branch, and the edges show the rules: `α(4)`, `β(4)`, `γ(1){x/a}`, `δ(3){x/c₁}`, `¬¬(2)`; a closed
+branch ends in `✕` (the edge `⊥(3,6)` names the contradictory formulas), an open one in `◯` and one stopped by
+the limits in `ⓤ`.
 -}
 semanticTableauToDOT : FOLSemanticTableau -> String
 semanticTableauToDOT t =
-    let
-        toStringNode =
-            \( i, ti ) ->
-                Just <|
-                    if i == -1 then
-                        "🗴"
-
-                    else if i == 1 then
-                        "⭘"
-                    
-                    else if i == 2 then
-                        "ⓤ"
-
-                    else
-                        "F" ++ (replaceBySubscript <| String.fromInt (ti.i + 1)) ++ "≡" ++ FOL_SS.ffolToString ti.f
-
-        toStringEdge =
-            \ei ->
-                case ei.r of
-                    L ->
-                        "L"
-
-                    E ->
-                        "E"
-
-                    DN ->
-                        "dN(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")"
-
-                    A ->
-                        "α" ++ (replaceBySubscript <| String.fromInt ei.br) ++ "(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")"
-
-                    B ->
-                        "β" ++ (replaceBySubscript <| String.fromInt ei.br) ++ "(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")"
-
-                    G ->
-                        "γ(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ "," ++ FOL_SS.substitutionToString ei.s ++ ")"
-
-                    D ->
-                        "δ(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")⇒" ++ FOL_SS.substitutionToString ei.s
-
-                    I ->
-                        "⟂(" ++ (String.join "," <| List.map (\ind -> "F" ++ (replaceBySubscript <| String.fromInt (ind + 1))) ei.is) ++ ")"
-
-                    T ->
-                        "T"
-    in
-    String.replace "\n" "" <| Graph.DOT.output toStringNode (Maybe.map toStringEdge) <| t
+    TD.toDOT "" (toDTrees t)
 
 
-{-| It allows to represent a FOL Semantic Tableau as a DOT String rederable by GraphViz, with applying custom styles.
+{-| It represents a FOL Semantic Tableau as a DOT String renderable by GraphViz, with custom styles.
 -}
 semanticTableauToDOTStyled : FOLSemanticTableau -> Styles -> String
 semanticTableauToDOTStyled t myStyles =
     let
-        toStringNode =
-            \( i, ti ) ->
-                Just <|
-                    if i == -1 then
-                        "🗴"
+        rankdir =
+            case myStyles.rankdir of
+                TB ->
+                    "TB"
 
-                    else if i == 1 then
-                        "⭘"
-                    
-                    else if i == 2 then
-                        "ⓤ"
+                LR ->
+                    "LR"
 
-                    else
-                        "F" ++ (replaceBySubscript <| String.fromInt (ti.i + 1)) ++ "≡" ++ FOL_SS.ffolToString ti.f
+                BT ->
+                    "BT"
 
-        toStringEdge =
-            \ei ->
-                case ei.r of
-                    L ->
-                        "L"
-
-                    E ->
-                        "E"
-
-                    DN ->
-                        "dN(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")"
-
-                    A ->
-                        "α" ++ (replaceBySubscript <| String.fromInt ei.br) ++ "(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")"
-
-                    B ->
-                        "β" ++ (replaceBySubscript <| String.fromInt ei.br) ++ "(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")"
-
-                    G ->
-                        "γ(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ "," ++ FOL_SS.substitutionToString ei.s ++ ")"
-
-                    D ->
-                        "δ(F" ++ (replaceBySubscript <| String.join "," <| List.map (\ind -> String.fromInt <| ind + 1) ei.is) ++ ")⇒" ++ FOL_SS.substitutionToString ei.s
-
-                    I ->
-                        "⟂(" ++ (String.join "," <| List.map (\ind -> "F" ++ (replaceBySubscript <| String.fromInt (ind + 1))) ei.is) ++ ")"
-
-                    T ->
-                        "T"
+                RL ->
+                    "RL"
     in
-    String.replace "\n" "" <| Graph.DOT.outputWithStyles myStyles toStringNode (Maybe.map toStringEdge) <| t
+    TD.toDOT
+        (String.join "\n"
+            [ "  rankdir=" ++ rankdir
+            , "  graph [" ++ myStyles.graph ++ "]"
+            , "  node [" ++ myStyles.node ++ "]"
+            , "  edge [" ++ myStyles.edge ++ "]"
+            ]
+        )
+        (toDTrees t)
+
 
 
 -- -- AuxiliarMethods for removing nodes that are irrelevant in the search process

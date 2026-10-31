@@ -59,8 +59,8 @@ import Dict exposing (Dict)
 import Graph.Tree as GTree exposing (Tree)
 import Json.Encode as JSONE
 import List.Extra as LE
-import LogicUS.FOL.AuxiliarFuctions exposing (replaceBySubscript)
 import LogicUS.FOL.SyntaxSemantics as FOL_SS exposing (FormulaFOL(..), Ident, SetFOL, Substitution, Term(..), Variable)
+import LogicUS.FOL.TableauDisplay as TD exposing (DTree(..))
 import Set exposing (Set)
 
 
@@ -83,7 +83,7 @@ type alias FVTableau =
     }
 
 
-{-| A node of the tree: its number `i` (0 for the leaves), its formula (with the free variables it was given), the
+{-| A node of the tree: its number `i` (its depth in the branch; 0 for the leaves), its formula (with the free variables it was given), the
 rule that produced it, the numbers of the nodes it comes from, and a substitution: the instantiation of the bound
 variable for γ and δ, and the bindings of the free variables made to close the branch for a closure.
 -}
@@ -1210,25 +1210,21 @@ buildTree st firstLeaf =
         kids id =
             Maybe.withDefault [] (Dict.get id children)
 
-        -- numbers of the formula nodes in preorder
-        number id ( d, n ) =
+        -- the number of a formula node is its depth in the branch
+        number depth id d =
             case Dict.get id nodes of
                 Just r ->
-                    let
-                        acc =
-                            if isFormulaRule r.rule then
-                                ( Dict.insert id (n + 1) d, n + 1 )
+                    if isFormulaRule r.rule then
+                        List.foldl (number (depth + 1)) (Dict.insert id (depth + 1) d) (kids id)
 
-                            else
-                                ( d, n )
-                    in
-                    List.foldl number acc (kids id)
+                    else
+                        List.foldl (number depth) d (kids id)
 
                 Nothing ->
-                    ( d, n )
+                    d
 
-        ( nums, _ ) =
-            List.foldl number ( Dict.empty, 0 ) (kids -1)
+        nums =
+            List.foldl (number 0) Dict.empty (kids -1)
 
         num id =
             Maybe.withDefault 0 (Dict.get id nums)
@@ -1255,72 +1251,62 @@ buildTree st firstLeaf =
 --====================--
 
 
-fname : Int -> String
-fname i =
-    "F" ++ replaceBySubscript (String.fromInt i)
-
-
 nodeLabel : FVNode -> String
 nodeLabel n =
     case n.rule of
         Closure ->
-            "🗴"
+            TD.closedMark
 
         OpenLeaf ->
-            "⭘"
+            TD.openMark
 
         LimitLeaf ->
-            "ⓤ"
+            TD.undecidedMark
 
         Unexplored ->
-            "…"
+            TD.unexploredMark
 
         _ ->
-            fname n.i ++ "≡" ++ FOL_SS.ffolToString n.f
+            TD.numbered n.i n.f
 
 
 ruleLabel : FVNode -> String
 ruleLabel n =
     let
         froms =
-            String.join "," (List.map fname n.from)
+            List.map String.fromInt n.from
     in
     case n.rule of
-        Premise ->
-            ""
-
         DoubleNeg ->
-            "dN(" ++ froms ++ ")"
+            TD.rule "¬¬" froms ""
 
-        Alpha c ->
-            "α" ++ replaceBySubscript (String.fromInt c) ++ "(" ++ froms ++ ")"
+        Alpha _ ->
+            TD.rule "α" froms ""
 
-        Beta c ->
-            "β" ++ replaceBySubscript (String.fromInt c) ++ "(" ++ froms ++ ")"
+        Beta _ ->
+            TD.rule "β" froms ""
 
         Gamma ->
-            if Dict.isEmpty n.subs then
-                "γ(" ++ froms ++ ")"
-
-            else
-                "γ(" ++ froms ++ "," ++ FOL_SS.substitutionToString n.subs ++ ")"
+            TD.rule "γ" froms (TD.substitution n.subs)
 
         Delta ->
-            "δ(" ++ froms ++ ")⇒" ++ FOL_SS.substitutionToString n.subs
+            TD.rule "δ" froms (TD.substitution n.subs)
 
         Closure ->
-            "⟂("
-                ++ froms
-                ++ ")"
-                ++ (if Dict.isEmpty n.subs then
-                        ""
-
-                    else
-                        FOL_SS.substitutionToString n.subs
-                   )
+            TD.rule "⊥" froms (TD.substitution n.subs)
 
         _ ->
             ""
+
+
+toDTrees : Tree FVNode -> List DTree
+toDTrees tree =
+    case GTree.root tree of
+        Just ( n, ch ) ->
+            [ DTree { node = nodeLabel n, edge = ruleLabel n } (List.concatMap toDTrees ch) ]
+
+        Nothing ->
+            []
 
 
 times : Int -> String
@@ -1377,79 +1363,20 @@ semanticTableauFVSummary t =
                     ++ "."
 
 
-{-| It represents the tableau as a string, a node per line.
+{-| It represents the tableau as a string: a node per line, indented by its depth, with the rule that produced it,
+and the answer at the end. Each formula is numbered by its depth in the branch: `5. ¬P(x₁)   % β(4)`.
 -}
 semanticTableauFVToString : FVTableau -> String
 semanticTableauFVToString t =
-    let
-        go indent tree =
-            case GTree.root tree of
-                Just ( n, ch ) ->
-                    let
-                        r =
-                            ruleLabel n
-                    in
-                    (String.repeat indent "  "
-                        ++ nodeLabel n
-                        ++ (if r == "" then
-                                ""
-
-                            else
-                                "   [" ++ r ++ "]"
-                           )
-                    )
-                        :: List.concatMap (go (indent + 1)) ch
-
-                Nothing ->
-                    []
-    in
-    String.join "\n" (go 0 t.tree ++ [ semanticTableauFVSummary t ])
+    TD.toText (toDTrees t.tree) ++ "\n" ++ semanticTableauFVSummary t
 
 
-{-| It represents the tableau as a DOT graph (GraphViz). The first node is the summary of the answer, and the edges
-show the rules; the closures show the bindings of the free variables that they make.
+{-| It represents the tableau as a DOT graph (GraphViz). The first node is the summary of the answer. Each formula
+is numbered by its depth in the branch, and the edges show the rules: `α(4)`, `β(4)`, `γ(1){x/x₁}`,
+`δ(3){y/ş₁(x₁)}`, `¬¬(2)`; a closed branch ends in `✕`, and the edge `⊥(3,6){x₁/a}` names the two formulas that
+close it and the bindings of the free variables that the closure makes. An open branch ends in `◯`, one stopped by
+the limits in `ⓤ` and one not explored in `…`.
 -}
 semanticTableauFVToDOT : FVTableau -> String
 semanticTableauFVToDOT t =
-    let
-        q s =
-            JSONE.encode 0 (JSONE.string s)
-
-        go parent tree ( lines, n ) =
-            case GTree.root tree of
-                Just ( node, ch ) ->
-                    let
-                        me =
-                            n
-
-                        r =
-                            ruleLabel node
-
-                        l1 =
-                            "  " ++ String.fromInt me ++ " [label=" ++ q (nodeLabel node) ++ "];"
-
-                        l2 =
-                            if parent < 0 then
-                                []
-
-                            else if r == "" then
-                                [ "  " ++ String.fromInt parent ++ " -> " ++ String.fromInt me ++ ";" ]
-
-                            else
-                                [ "  " ++ String.fromInt parent ++ " -> " ++ String.fromInt me ++ " [label=" ++ q r ++ "];" ]
-                    in
-                    List.foldl (go me) ( lines ++ l1 :: l2, n + 1 ) ch
-
-                Nothing ->
-                    ( lines, n )
-
-        ( body, _ ) =
-            go -1 t.tree ( [], 0 )
-    in
-    String.join "\n"
-        ([ "digraph G {"
-         , "  summary [label=" ++ q (semanticTableauFVSummary t) ++ "];"
-         ]
-            ++ body
-            ++ [ "}" ]
-        )
+    TD.toDOT ("  summary [label=" ++ JSONE.encode 0 (JSONE.string (semanticTableauFVSummary t)) ++ "];") (toDTrees t.tree)

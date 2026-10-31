@@ -273,26 +273,51 @@ ffolQuantifiedComponents f =
 
 
 
--- It gives if in the nodes of the esplored branch is there any contradiction. If it is discovered, it return the list of formulas implied in it
+-- It gives if in the nodes of the esplored branch is there any contradiction. If it is discovered, it return the list of formulas implied in it.
+-- The branch had no contradiction before the last rule added the nodes `newKeys`, so only the pairs with a new node
+-- are compared. The answer is the one of comparing every pair: the first node (in the order of the keys) that is
+-- inconsistent or has a complementary node after it, and the first such node.
 
 
-searchContradiction : List ( Int, ( Int, TableauNodeItem ) ) -> Maybe ( List Int, List Int )
-searchContradiction nodes =
-    case nodes of
-        [] ->
-            Nothing
+searchContradiction : List Int -> Dict Int ( Int, TableauNodeItem ) -> Maybe ( List Int, List Int )
+searchContradiction newKeys nodes =
+    let
+        news =
+            List.filterMap (\k -> Maybe.map (Tuple.pair k) (Dict.get k nodes)) (List.sort newKeys)
 
-        ( i, ( _, ti ) ) :: xs ->
-            if ti.t == I then
-                Just ( [ i ], [ ti.i ] )
+        isNew k =
+            List.member k newKeys
 
-            else
-                case List.head <| List.filter (\( _, ( _, ti2 ) ) -> ti.f == FOL_SS.ffolNegation ti2.f) xs of
-                    Nothing ->
-                        searchContradiction xs
+        go xs =
+            case xs of
+                [] ->
+                    Nothing
 
-                    Just ( i2, ( _, ti2 ) ) ->
-                        Just ( [ i, i2 ], [ ti.i, ti2.i ] )
+                ( i, ( _, ti ) ) :: rest ->
+                    if isNew i && ti.t == I then
+                        Just ( [ i ], [ ti.i ] )
+
+                    else
+                        let
+                            candidates =
+                                if isNew i then
+                                    rest
+
+                                else
+                                    List.filter (\( k, _ ) -> k > i) news
+                        in
+                        case LE.find (\( _, ( _, ti2 ) ) -> ti.f == FOL_SS.ffolNegation ti2.f) candidates of
+                            Nothing ->
+                                go rest
+
+                            Just ( i2, ( _, ti2 ) ) ->
+                                Just ( [ i, i2 ], [ ti.i, ti2.i ] )
+    in
+    if List.isEmpty news then
+        Nothing
+
+    else
+        go (Dict.toList nodes)
 
 
 
@@ -328,7 +353,7 @@ semanticTableau fs uMax dMax =
     in
     let
         ( res_nodes, res_edges ) =
-            semanticTableauAux m dMax uMax (List.length fs) (List.length fs) (List.length fs - 1) 0 nodes edges False
+            semanticTableauAux m dMax uMax (List.length fs) (List.length fs) (List.length fs - 1) 0 nodes edges False (Dict.keys nodes)
     in
     Graph.fromNodesAndEdges
         (List.map (\( k, v ) -> Node k v) <| Dict.toList <| res_nodes)
@@ -350,10 +375,11 @@ semanticTableauAux :
     -> Dict Int ( Int, TableauNodeItem )
     -> Dict ( Int, Int ) (Maybe TableauEdgeItem)
     -> Bool
+    -> List Int
     -> ( Dict Int ( Int, TableauNodeItem ), Dict ( Int, Int ) (Maybe TableauEdgeItem) )
-semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges undec=
+semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges undec newKeys =
     -- 1. Search contradiction
-    case searchContradiction <| Dict.toList nodes of
+    case searchContradiction newKeys nodes of
         -- 1.1. If it is encountered, then STOP --> CLOSED BRANCH
         Just ( xig, xif ) ->
             let
@@ -377,7 +403,11 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges undec=
                 )
 
             else
-                case List.head <| List.filter (\( _, ( _, ti ) ) -> ti.t == DN && ti.u /= 0) <| Dict.toList nodes of
+                let
+                    nodeList =
+                        Dict.toList nodes
+                in
+                case LE.find (\( _, ( _, ti ) ) -> ti.t == DN && ti.u /= 0) nodeList of
                     Just ( i, ( _, ti ) ) ->
                         let
                             g =
@@ -391,10 +421,10 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges undec=
                             new_edges =
                                 Dict.insert ( nidp, nid ) (Just { r = DN, is = [ ti.i ], br = 1, s = Dict.empty }) edges
                         in
-                        semanticTableauAux m dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes new_edges undec
+                        semanticTableauAux m dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes new_edges undec [ nid ]
 
                     Nothing ->
-                        case List.head <| List.filter (\( _, ( _, ti ) ) -> ti.t == A && ti.u /= 0) <| Dict.toList nodes of
+                        case LE.find (\( _, ( _, ti ) ) -> ti.t == A && ti.u /= 0) nodeList of
                             Just ( i, ( _, ti ) ) ->
                                 let
                                     ( g, h ) =
@@ -415,10 +445,10 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges undec=
                                         Dict.insert ( nid, nid + 1 ) (Just { r = A, is = [ ti.i ], br = 2, s = Dict.empty }) <|
                                             Dict.insert ( nidp, nid ) (Just { r = A, is = [ ti.i ], br = 1, s = Dict.empty }) edges
                                 in
-                                semanticTableauAux m dMax uMax (nid + 2) (nid2 + 2) (nid + 1) (dcur + 1) new_nodes new_edges undec
+                                semanticTableauAux m dMax uMax (nid + 2) (nid2 + 2) (nid + 1) (dcur + 1) new_nodes new_edges undec [ nid, nid + 1 ]
 
                             Nothing ->
-                                case List.head <| List.filter (\( _, ( _, ti ) ) -> ti.t == B && ti.u /= 0) <| Dict.toList nodes of
+                                case LE.find (\( _, ( _, ti ) ) -> ti.t == B && ti.u /= 0) nodeList of
                                     Just ( i, ( _, ti ) ) ->
                                         let
                                             ( g, h ) =
@@ -439,7 +469,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges undec=
                                         in
                                         let
                                             ( nodes1, edges1 ) =
-                                                semanticTableauAux m dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes1 new_edges1 undec
+                                                semanticTableauAux m dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes1 new_edges1 undec [ nid ]
                                         in
                                         let
                                             new_nid =
@@ -455,12 +485,12 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges undec=
                                         in
                                         let
                                             ( nodes2, edges2 ) =
-                                                semanticTableauAux m dMax uMax (new_nid + 1) (nid2 + 1) new_nid (dcur + 1) new_nodes2 new_edges2 undec
+                                                semanticTableauAux m dMax uMax (new_nid + 1) (nid2 + 1) new_nid (dcur + 1) new_nodes2 new_edges2 undec [ new_nid ]
                                         in
                                         ( Dict.union nodes1 nodes2, Dict.union edges1 edges2 )
 
                                     Nothing ->
-                                        case List.head <| List.filter (\( _, ( _, ti ) ) -> ti.t == D && ti.u /= 0) <| Dict.toList nodes of
+                                        case LE.find (\( _, ( _, ti ) ) -> ti.t == D && ti.u /= 0) nodeList of
                                             Just ( i, ( _, ti ) ) ->
                                                 let
                                                     c =
@@ -477,18 +507,32 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges undec=
                                                     new_edges =
                                                         Dict.insert ( nidp, nid ) (Just { r = D, is = [ i ], br = 1, s = Dict.singleton v c }) edges
                                                 in
-                                                semanticTableauAux (m ++ [ c ]) dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes new_edges undec
+                                                semanticTableauAux (m ++ [ c ]) dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes new_edges undec [ nid ]
 
                                             Nothing ->
-                                                case List.head <| List.sortBy (\( _, ( _, ti ) ) -> uMax - ti.u) <| List.filter (\( _, ( _, ti ) ) -> ti.t == G && ti.u /= 0) <| Dict.toList nodes of
+                                                case List.head <| List.sortBy (\( _, ( _, ti ) ) -> uMax - ti.u) <| List.filter (\( _, ( _, ti ) ) -> ti.t == G && ti.u /= 0) nodeList of
                                                     Just ( i, ( _, ti ) ) ->
                                                         let
-                                                            occurs =
-                                                                List.map (\( v, lv ) -> ( v, 1 + List.length lv )) <| LE.gatherEquals <| List.concat <| List.map (\( _, ti2 ) -> FOL_SS.ffolAllClosedTerms ti2.f) <| List.filter (\( _, ti2 ) -> ti2.t == L || ti2.t == E) <| Dict.values nodes
+                                                            -- closed terms of the literals, with repetitions
+                                                            litTerms =
+                                                                List.concat <| List.map (\( _, ti2 ) -> FOL_SS.ffolAllClosedTerms ti2.f) <| List.filter (\( _, ti2 ) -> ti2.t == L || ti2.t == E) <| List.map Tuple.second nodeList
+
+                                                            occurrences x =
+                                                                List.foldl
+                                                                    (\y n ->
+                                                                        if y == x then
+                                                                            n + 1
+
+                                                                        else
+                                                                            n
+                                                                    )
+                                                                    0
+                                                                    litTerms
                                                         in
                                                         let
+                                                            -- the unused term that occurs most often (the first one if several)
                                                             tsus =
-                                                                Maybe.withDefault (generateNewConst 1 m) <| LE.maximumBy (\x -> Maybe.withDefault 0 <| List.head <| List.map Tuple.second <| List.filter (\( y, _ ) -> y == x) occurs) <| List.filter (\x -> not (List.member x ti.ut)) m
+                                                                Maybe.withDefault (generateNewConst 1 m) <| LE.maximumBy occurrences <| List.filter (\x -> not (List.member x ti.ut)) m
 
                                                             ( v, g ) =
                                                                 Maybe.withDefault ( ( "", [], 0 ), Insat ) <| ffolQuantifiedComponents ti.f
@@ -504,7 +548,7 @@ semanticTableauAux m dMax uMax nid nid2 nidp dcur nodes edges undec=
                                                             new_edges =
                                                                 Dict.insert ( nidp, nid ) (Just { r = G, is = [ ti.i ], br = 1, s = Dict.singleton v tsus }) edges
                                                         in
-                                                        semanticTableauAux new_m dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes new_edges True
+                                                        semanticTableauAux new_m dMax uMax (nid + 1) (nid2 + 1) nid (dcur + 1) new_nodes new_edges True [ nid ]
 
                                                     Nothing ->
                                                         let

@@ -97,6 +97,11 @@ suite =
                     |> List.drop 9
                     |> List.map (String.join " " << String.words)
                     |> Expect.equal [ "10. (c₁ = e) % α(9).𝓛𝓛8", "✕ % ⊥(𝓛𝓛10(6))" ]
+        , test "inequalities are written with ≠" <|
+            \_ ->
+                ( SS.ffolToString (SS.ffolRead "¬(f(a) = b)"), SS.ffolToMathString (SS.ffolRead "¬(f(a) = b)") )
+                    |> Tuple.mapSecond (String.contains "\\neq")
+                    |> Expect.equal ( "(f(a) ≠ b)", True )
         , test "DOT: numbered formulas, rules on the edges and the same leaf marks" <|
             \_ ->
                 ST.semanticTableauToDOT (ST.semanticTableau (read [ "P(a) | Q(a)", "¬P(a)" ]) 3 25)

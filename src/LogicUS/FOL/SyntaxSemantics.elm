@@ -1980,7 +1980,7 @@ ffolToString f =
             "(" ++ termToString t1 ++ " = " ++ termToString t2 ++ ")"
 
         Neg (Equal t1 t2) ->
-            "(" ++ termToString t1 ++ " != " ++ termToString t2 ++ ")"
+            "(" ++ termToString t1 ++ " ≠ " ++ termToString t2 ++ ")"
 
         Neg p ->
             "¬" ++ ffolToString p
@@ -2101,6 +2101,9 @@ ffolToMathString f =
 
         Equal t1 t2 ->
             " \\left( " ++ termToMathString t1 ++ " = " ++ termToMathString t2 ++ " \\right) "
+
+        Neg (Equal t1 t2) ->
+            " \\left( " ++ termToMathString t1 ++ " \\neq " ++ termToMathString t2 ++ " \\right) "
 
         Neg p ->
             " \\neg " ++ ffolToMathString p

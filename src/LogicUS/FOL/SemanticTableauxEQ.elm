@@ -317,7 +317,7 @@ semanticTableauEq fs maxConstants maxSize =
     in
     let
         nodes =
-            Dict.fromList <| List.indexedMap generateNodeAuxFromF <| List.map (reduceDN << FOL_SS.ffolUniversalClosure) fs
+            Dict.fromList <| List.indexedMap generateNodeAuxFromF <| List.map (reduceDN << universalClosure) fs
 
         universe =
             []
@@ -338,13 +338,22 @@ semanticTableauEq fs maxConstants maxSize =
                         )
                     )
                     ( List.length fs - 1, tableau )
-                    fs
+                    (List.map universalClosure fs)
     in
     -- let
     --     view =
     --         Debug.log "T" <| semanticTableauToString tableau
     -- in
     renameGeneratedConstants fs <| Maybe.withDefault GTree.empty <| List.head <| postProcessingSTEQ 1 Dict.empty newTableau
+
+
+
+-- The universal closure of a formula, without renaming its bound variables (a closed formula stays as it is).
+
+
+universalClosure : FormulaFOL -> FormulaFOL
+universalClosure f =
+    List.foldr Forall f (FOL_SS.ffolFreeVars f)
 
 
 

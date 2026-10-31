@@ -11,6 +11,7 @@ import Fuzz
 import Graph.Tree as GTree
 import List.Extra as LE
 import LogicUS.FOL.SemanticTableaux as ST
+import LogicUS.FOL.SemanticTableauxEQ as STEQ
 import LogicUS.FOL.SemanticTableauxFV as FV exposing (FVNode, FVResult(..), FVRule(..))
 import LogicUS.FOL.SyntaxSemantics as SS exposing (FormulaFOL(..), Term(..))
 import Test exposing (Test, describe, fuzz, fuzz2, test)
@@ -147,8 +148,24 @@ suite =
             \_ -> tableau [ "P(a) | Q(a)", "¬P(a)", "!E[X]¬Q(X)" ] |> .result |> Expect.equal Open
         , test "a vacuous quantifier is used once: {∀x R, ∃x ¬P(a)} is satisfiable" <|
             \_ -> tableau [ "!A[X]R", "!E[X]¬P(a)" ] |> .result |> Expect.equal Open
-        , test "free variables of the input are constants: {P(x), ¬P(a)} is satisfiable" <|
-            \_ -> tableau [ "P(X)", "¬P(a)" ] |> .result |> Expect.equal Open
+        , test "free variables of the input are universally quantified: {P(x), ¬P(a)} is unsatisfiable, in the three tableaux" <|
+            \_ ->
+                let
+                    fs =
+                        List.map SS.ffolRead [ "P(X)", "¬P(a)" ]
+                in
+                [ FV.semanticTableauFVIsClosed (FV.semanticTableauFV fs 3 40)
+                , ST.semanticTableauIsInsat (ST.semanticTableau fs 3 25)
+                , STEQ.stfoleqCheckIfClose (STEQ.semanticTableauEq fs 3 3)
+                ]
+                    |> Expect.equal [ True, True, True ]
+        , fuzz2 (Fuzz.listOfLengthBetween 1 3 (O.formula 2)) (Fuzz.listOfLength 8 O.structure) "formulas with free variables: a closed tableau means no model of their universal closures" <|
+            \fs ss ->
+                if FV.semanticTableauFVIsClosed (FV.semanticTableauFVWith limits fs) || ST.semanticTableauIsInsat (ST.semanticTableau fs 2 20) then
+                    ss |> List.filter (\s -> List.all (O.evalClosed s) fs) |> List.length |> Expect.equal 0
+
+                else
+                    Expect.pass
         , test "an open branch with an equality between different terms is not a model" <|
             \_ -> tableau [ "a = b", "P(a)", "¬P(b)" ] |> .result |> isUnknown |> Expect.equal True
         , test "¬(t = t) closes after unification" <|

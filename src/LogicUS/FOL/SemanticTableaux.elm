@@ -338,10 +338,15 @@ generateNewConst i m =
 
 
 {-| It performs the Semantic Tableaux algorithm on a set of FOL formulas. As the algorithm can be infinite, you must indicate the maximum depth allowed. Specifically, you must specify the maximum number of times a gamma formula can be used and the absolute limit for the depth of the tree.
+
+The free variables of the formulas are universally quantified: the tableau starts from their universal closures.
 -}
 semanticTableau : SetFOL -> Int -> Int -> FOLSemanticTableau
-semanticTableau fs uMax dMax =
+semanticTableau fs0 uMax dMax =
     let
+        fs =
+            List.map universalClosure fs0
+
         nodes =
             Dict.fromList <| List.indexedMap (\i f -> ( i, ( 0, { f = f, t = ffolType f, u = uMax, ut = [], i = i, ps = [], ant = i - 1 } ) )) fs
 
@@ -358,6 +363,15 @@ semanticTableau fs uMax dMax =
     Graph.fromNodesAndEdges
         (List.map (\( k, v ) -> Node k v) <| Dict.toList <| res_nodes)
         (List.map (\( ( s, t ), v ) -> Edge s t v) <| Dict.toList <| res_edges)
+
+
+
+-- The universal closure of a formula, without renaming its bound variables (a closed formula stays as it is).
+
+
+universalClosure : FormulaFOL -> FormulaFOL
+universalClosure f =
+    List.foldr Forall f (FOL_SS.ffolFreeVars f)
 
 
 

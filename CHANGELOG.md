@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.2.2
+
+### Changed
+
+- The free variables of the input formulas are universally quantified in the three semantic tableaux:
+  `SemanticTableaux` and `SemanticTableauxFV` treated them as constants, while `SemanticTableauxEQ` (and resolution)
+  closed them universally. `{P(x), ¬P(a)}` is now refuted by the three. The tableaux start from the universal
+  closures, and closed formulas are shown as they were given (`SemanticTableauxEQ` no longer renames their bound
+  variables apart, which showed `x¹`, `y²`...).
+- `ffolToString` writes `¬(s = t)` as `(s ≠ t)` instead of `(s != t)`, and `ffolToMathString` as `s \neq t`.
+
 ## 3.2.1
 
 ### Changed

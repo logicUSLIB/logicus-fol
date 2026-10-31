@@ -36,7 +36,8 @@ Equality is only used to close branches with `¬(t = t)` (after unification), an
 fully expanded open branch with an equality `s = t` between different terms gives `Unknown`. The module
 `SemanticTableauxEQ` has rules for equality.
 
-Free variables of the input formulas are treated as constants (they are not bound by the unifiers).
+The free variables of the input formulas are universally quantified, as in the other tableaux and in resolution: the
+tableau starts from their universal closures.
 
 
 # Types
@@ -1054,8 +1055,11 @@ semanticTableauFV fs uMax dMax =
 {-| It builds a free-variable tableau of a set of formulas with the given limits.
 -}
 semanticTableauFVWith : FVLimits -> SetFOL -> FVTableau
-semanticTableauFVWith limits fs =
+semanticTableauFVWith limits fs0 =
     let
+        fs =
+            List.map universalClosure fs0
+
         depthLimit =
             clamp 0 250 limits.depth
 
@@ -1144,6 +1148,14 @@ semanticTableauFVWith limits fs =
     , depth = depthLimit
     , steps = stepsF
     }
+
+
+-- The universal closure of a formula, without renaming its bound variables (a closed formula stays as it is).
+
+
+universalClosure : FormulaFOL -> FormulaFOL
+universalClosure f =
+    List.foldr Forall f (FOL_SS.ffolFreeVars f)
 
 
 {-| It says if the tableau is closed, that is, if it proves that the set of formulas is unsatisfiable.

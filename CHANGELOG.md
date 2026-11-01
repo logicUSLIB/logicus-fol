@@ -1,5 +1,31 @@
 # Changelog
 
+## 3.3.0
+
+Requires logicus-pl 4.2.0, which has the propositional deduction systems (`LogicUS.PL.Deduction`).
+
+### Added
+
+- `LogicUS.FOL.Deduction`: deduction systems for first-order logic given by their rules, and proofs checked with
+  them. It extends `LogicUS.PL.Deduction` with quantifiers and equality, with the same syntax for rules and proofs
+  (`ProofLine`, `readProof` and `proofToString` are those of `LogicUS.PL.Deduction`).
+  - Rules are schemas: capital letters stand for formulas, `A[x/t]` is a substitution, a premise `[A] B` is a
+    subproof that the rule closes, and the side conditions are `a fresh` (eigenvariables of ∀I and ∃E) and
+    `x not free in A`. Axioms are rules without premises. `readSystem` reads a rule per line and `systemToString`
+    writes them back.
+  - `checkProof` checks each line with the rules of the system (the cited lines may be in any order) and explains
+    each error: a rule that does not give the formula (also when a substitution would capture a variable), a rule
+    that is not in the system, a line that is below or inside a closed subproof, a subproof cited by part, an
+    eigenvariable that is not new, a side condition that does not hold, a premise that is not one of the exercise, a
+    proof that ends inside a subproof or without the goal.
+  - `hints` gives the rules that can be used at the end of a proof: applied to the lines that can be cited, closing
+    the current subproof, or giving the goal (or a target) from what is still needed; a term that is still to be
+    chosen is written `?t` (`∀E 1 gives P(?t)`). Every suggested line is accepted by `checkProof`.
+- `LogicUS.FOL.DeductionSystems`: natural deduction (the rules of the connectives of `LogicUS.PL.DeductionSystems`,
+  quantifiers, equality, derived rules such as the negation of the quantifiers) and an axiomatic system (A1-A5,
+  modus ponens and generalization), as text that can be edited. The presets have the same names as the propositional
+  ones.
+
 ## 3.2.2
 
 ### Changed
